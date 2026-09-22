@@ -1,6 +1,6 @@
 // Client HTTP leger et poli : User-Agent identifiable, robots.txt pour les pages HTML, delai par hote, timeout, 429 classe TEMPORARY.
 // Pas de cache disque : les flux changent en continu et les reponses sont petites.
-const UA = 'ai-radar/0.1 (+https://github.com/simon-saulay/ai-radar; research; contact simon.saulay@brevo.com)';
+const UA = 'ai-radar/0.1 (+https://github.com/ssaulay/ai-radar; research; contact simon.saulay@brevo.com)';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export function makeHttp({ hostDelayMs = 700, timeoutMs = 20000, counters = {} } = {}) {

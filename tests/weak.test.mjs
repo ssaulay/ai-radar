@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openStore } from '../src/core/store.mjs';
 import { loadLexicon } from '../src/analyze/relevance.mjs';
-import { parseStealthPage, parseLiteLlmKeys, parseHfOrg, parseGithubOrg, modelAddFromTitle, parseInferencePulls, parseSitemap, parseChangelogMd, parseStatusComponents, diffEntries, catalogAll, loadCatalogs } from '../src/collect/catalog.mjs';
+import { parseStealthPage, parseLiteLlmKeys, parseHfOrg, parseGithubOrg, modelAddFromTitle, parseInferencePulls, parseSitemap, parseChangelogMd, parseStatusComponents, diffEntries, catalogAll, loadCatalogs, parseSirene, parseAshbyJobs, parseGreenhouseDepartments, parseEdgar, parsePolymarketEvents, parseDiscourseCategories, parseDiscordWidget } from '../src/collect/catalog.mjs';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const lex = loadLexicon(ROOT);
@@ -133,4 +133,66 @@ test('loadCatalogs : labs.json engendre un catalogue HF et GitHub par organisati
   assert.ok(cats.some(c => c.type === 'hf_org' && c.org === 'openai' && c.url.includes('author=openai')));
   assert.ok(cats.some(c => c.type === 'github_org' && c.org === 'anthropics'));
   assert.ok(cats.filter(c => c.type === 'hf_org').length >= 25 && cats.filter(c => c.type === 'github_org').length >= 20);
+});
+
+test('5b parseurs : SIRENE (nom filtré, personnes physiques exclues, aucun dirigeant personne physique), EDGAR, Polymarket (filtre IA), Discourse, Discord', () => {
+  const sir = parseSirene({ results: [
+    { siren: '941811218', nom_complet: 'ANTHROPIC FRANCE', nature_juridique: '5710', date_creation: '2025-02-19', siege: { libelle_commune: 'PARIS' }, activite_principale: '58.29C', dirigeants: [{ nom: 'X', prenoms: 'Y', type_dirigeant: 'personne physique', date_de_naissance: '1990-01' }, { denomination: 'ANTHROPIC PBC', type_dirigeant: 'personne morale' }] },
+    { siren: '853616506', nom_complet: 'CLEMENCE GIRODET (ANTHROPIC)', nature_juridique: '1000', date_creation: '2019-09-01' },
+    { siren: '910617331', nom_complet: "OPEN'AIR", nature_juridique: '5710', date_creation: '2021-11-02' },
+  ] }, { match: '^ANTHROPIC( |$)', lab: 'anthropic' });
+  assert.equal(sir.length, 1); assert.equal(sir[0].key, '941811218'); assert.equal(sir[0].event_at, '2025-02-19T00:00:00.000Z');
+  assert.deepEqual(sir[0].extra.dirigeants_personnes_morales, ['ANTHROPIC PBC']); assert.ok(!JSON.stringify(sir[0]).includes('1990'), 'aucune donnée de personne physique');
+  const ed = parseEdgar({ hits: { hits: [{ _source: { adsh: '0002074935-25-000001', display_names: ['Thinking Machines Lab Jun 2025 a Series of CGF2021 LLC  (CIK 0002074935)'], file_date: '2025-06-27', ciks: ['0002074935'], biz_states: ['DE'], form: 'D' } }] } }, 'Thinking Machines');
+  assert.equal(ed[0].key, '0002074935-25-000001'); assert.equal(ed[0].event_at, '2025-06-27T00:00:00.000Z'); assert.equal(ed[0].url, 'https://www.sec.gov/Archives/edgar/data/2074935/000207493525000001/0002074935-25-000001-index.htm');
+  const pm = parsePolymarketEvents([{ id: 1, slug: 'gpt-6-release', title: 'Will OpenAI release GPT-6 before 2027?', createdAt: '2026-09-20T00:00:00Z', markets: [{}, {}] }, { id: 2, slug: 'nba', title: 'NBA champion 2027' }]);
+  assert.equal(pm.length, 1); assert.equal(pm[0].url, 'https://polymarket.com/event/gpt-6-release'); assert.equal(pm[0].extra.markets, 2);
+  const dc = parseDiscourseCategories({ category_list: { categories: [{ id: 5, name: 'Google Antigravity', slug: 'antigravity', topic_count: 12 }] } }, 'discuss.ai.google.dev');
+  assert.equal(dc[0].key, 'cat:5'); assert.equal(dc[0].url, 'https://discuss.ai.google.dev/c/antigravity/5');
+  const dw = parseDiscordWidget({ name: 'OpenAI', presence_count: 85170, channels: [{ id: '1', name: 'webmcp-stage' }] }, '974519864045756446');
+  assert.equal(dw[0].title, 'webmcp-stage'); assert.equal(dw[0].extra.guild, 'OpenAI');
+});
+
+test('5b offres d’emploi : postes historisés, un événement groupé par passage (amorçage : publiés < 48 h seulement), nouvelle équipe = événement, rejeu neutre', async () => {
+  const s = mk();
+  const state = { ashby: { jobs: [
+    { id: 'a1', title: 'Research Engineer', department: 'Research', team: 'Research', publishedAt: t(1), jobUrl: 'https://jobs.ashbyhq.com/openai/a1', isListed: true },
+    { id: 'a2', title: 'Accountant', department: 'Finance', team: 'Finance', publishedAt: t(24 * 30), jobUrl: 'u', isListed: true },
+    { id: 'a3', title: 'Hidden', department: 'Finance', team: 'Finance', publishedAt: t(1), isListed: false },
+  ] }, gh: { departments: [{ name: 'Compute', jobs: [{ id: 9, title: 'Datacenter Lead', first_published: t(2), absolute_url: 'https://job-boards.greenhouse.io/anthropic/jobs/9', location: { name: 'SF' } }] }] } };
+  const http = async url => url.includes('ashbyhq') ? { body: JSON.stringify(state.ashby) } : { body: JSON.stringify(state.gh) };
+  const catalogs = [{ id: 'jobs_ashby_openai', type: 'ashby_jobs', lab: 'openai', name: 'OpenAI', board: 'openai', url: 'https://api.ashbyhq.com/posting-api/job-board/openai' }, { id: 'jobs_greenhouse_anthropic', type: 'greenhouse_jobs', lab: 'anthropic', name: 'Anthropic', board: 'anthropic', url: 'https://boards-api.greenhouse.io/v1/boards/anthropic/departments' }];
+  const r1 = await catalogAll(s, http, { catalogs, lex, now: NOW, log: () => {} });
+  assert.equal(s.get('SELECT COUNT(*) n FROM job_postings').n, 3, 'a1, a2 et le poste Greenhouse historisés ; a3 non listé ignoré');
+  assert.equal(r1.events.length, 2, 'un événement groupé par board pour les postes publiés depuis moins de 48 h');
+  const g = s.get("SELECT * FROM weak_signals WHERE catalog_id='jobs_ashby_openai'");
+  assert.ok(/1 nouvelle\(s\) offre\(s\) chez OpenAI \(Ashby\) : « Research Engineer \(Research\) »/.test(g.reason), g.reason);
+  assert.equal(s.get("SELECT COUNT(*) n FROM weak_signals WHERE key LIKE 'team:%'").n, 0, 'équipes amorcées sans événement');
+  const r2 = await catalogAll(s, http, { catalogs, lex, now: NOW, force: true, log: () => {} });
+  assert.equal(r2.stats.events, 0, 'rejeu neutre');
+  state.ashby.jobs.push({ id: 'a4', title: 'Robotics Hardware Lead', department: 'Research', team: 'Robotics', publishedAt: t(0.5), jobUrl: 'u4', isListed: true });
+  const later = new Date(Date.parse(NOW) + 3600e3).toISOString();
+  const r3 = await catalogAll(s, http, { catalogs, lex, now: later, force: true, log: () => {} });
+  assert.deepEqual(r3.events.map(e => e.key).sort(), ['jobs:' + later.slice(0, 16), 'team:Research / Robotics']);
+  const team = s.get("SELECT * FROM weak_signals WHERE key='team:Research / Robotics'");
+  assert.ok(/Nouvelle équipe dans les offres de OpenAI : Research \/ Robotics \(1 poste\(s\) : Robotics Hardware Lead\)/.test(team.reason), team.reason);
+  assert.equal(s.get("SELECT first_seen_at FROM job_postings WHERE job_id='a4'").first_seen_at, later);
+  s.close();
+});
+
+test('5b : un catalogue runner_only est sauté hors GitHub Actions et journalisé SKIPPED', async () => {
+  const s = mk(); const prev = process.env.GITHUB_ACTIONS; delete process.env.GITHUB_ACTIONS;
+  try {
+    const r = await catalogAll(s, async () => ({ body: '[]' }), { catalogs: [{ id: 'polymarket_ai', type: 'polymarket_events', url: 'https://gamma-api.polymarket.com/events', runner_only: true }], lex, now: NOW, log: () => {} });
+    assert.equal(r.summary[0].status, 'SKIPPED'); assert.equal(s.get("SELECT status FROM source_runs WHERE source_id='polymarket_ai'").status, 'SKIPPED');
+  } finally { if (prev !== undefined) process.env.GITHUB_ACTIONS = prev; }
+  s.close();
+});
+
+test('5b loadCatalogs : SIRENE, Ashby, Greenhouse et EDGAR engendrés depuis labs.json', () => {
+  const cats = loadCatalogs(ROOT);
+  assert.ok(cats.some(c => c.id === 'sirene_anthropic' && /ANTHROPIC/.test(c.match)));
+  assert.ok(cats.some(c => c.id === 'jobs_greenhouse_anthropic') && cats.some(c => c.id === 'jobs_ashby_openai'));
+  assert.ok(cats.some(c => c.id === 'edgar_thinking_machines' && c.url.includes(encodeURIComponent('"Thinking Machines"'))));
+  assert.ok(cats.some(c => c.id === 'polymarket_ai' && c.runner_only));
 });

@@ -67,6 +67,8 @@
     { "id": "forum_openai", "family": "F", "type": "rss", "url": "https://community.openai.com/latest.rss", "every_min": 30 },
     { "id": "forum_hf", "family": "F", "type": "rss", "url": "https://discuss.huggingface.co/latest.rss", "every_min": 60 },
     { "id": "forum_cursor", "family": "F", "type": "rss", "url": "https://forum.cursor.com/latest.rss", "every_min": 60 },
+    { "id": "forum_perplexity", "family": "F", "type": "rss", "url": "https://community.perplexity.ai/latest.rss", "every_min": 60 },
+    { "id": "forum_googleai", "family": "F", "type": "rss", "url": "https://discuss.ai.google.dev/latest.rss", "every_min": 60 },
 
     { "id": "gnews_en_ai", "family": "G", "type": "rss", "url": "https://news.google.com/rss/search?q=%22artificial%20intelligence%22%20when%3A1h&hl=en-US&gl=US&ceid=US:en", "every_min": 30, "lang": "en" },
     { "id": "gnews_en_openai_anthropic", "family": "G", "type": "rss", "url": "https://news.google.com/rss/search?q=(OpenAI%20OR%20Anthropic%20OR%20DeepMind%20OR%20Mistral%20OR%20Nvidia)%20when%3A1h&hl=en-US&gl=US&ceid=US:en", "every_min": 30, "lang": "en" },

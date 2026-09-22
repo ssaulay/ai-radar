@@ -1,44 +1,317 @@
 {
   "version": 1,
-  "note": "Organisations surveillées pour les catalogues à fuite (lot 5). Slugs Hugging Face et GitHub vérifiés par appel le 22/09/2026 (anthropic n'a pas d'organisation HF publique, LiquidAI n'existe pas sur GitHub). microsoft, nvidia, google, apple ne sont suivis que sur Hugging Face : leurs organisations GitHub sont trop larges. Les champs ashby, greenhouse et sirene_names sont repris du plan (section 10.2) et restent à vérifier au sous-lot 5b avant activation.",
+  "note": "Organisations surveillées pour les catalogues à fuite (lot 5). Slugs Hugging Face et GitHub vérifiés par appel le 22/09/2026 (anthropic n'a pas d'organisation HF publique, LiquidAI n'existe pas sur GitHub). microsoft, nvidia, google, apple ne sont suivis que sur Hugging Face : leurs organisations GitHub sont trop larges. Sous-lot 5b (vérifié par appel le 22/09/2026) : sirene = requête et expression régulière sur le nom complet (personnes physiques exclues) ; ashby / greenhouse = board d'offres (Anthropic est chez Greenhouse, pas Ashby) ; edgar = expression exacte pour la recherche plein texte SEC, Form D seulement.",
   "hf_limit": 20,
   "github_limit": 20,
   "hf_every_min": 30,
   "github_every_min": 60,
   "labs": [
-    { "id": "openai", "name": "OpenAI", "hf": ["openai"], "github": ["openai"], "ashby": "openai", "sirene_names": ["OPENAI"] },
-    { "id": "anthropic", "name": "Anthropic", "hf": [], "github": ["anthropics"], "greenhouse": "anthropic", "sirene_names": ["ANTHROPIC"] },
-    { "id": "google_deepmind", "name": "Google DeepMind", "hf": ["google"], "github": ["google-deepmind", "google-research"] },
-    { "id": "meta", "name": "Meta AI", "hf": ["meta-llama"], "github": ["meta-llama", "facebookresearch"] },
-    { "id": "mistral", "name": "Mistral AI", "hf": ["mistralai"], "github": ["mistralai"], "ashby": "mistral.ai", "sirene_names": ["MISTRAL AI"] },
-    { "id": "deepseek", "name": "DeepSeek", "hf": ["deepseek-ai"], "github": ["deepseek-ai"] },
-    { "id": "qwen", "name": "Qwen (Alibaba)", "hf": ["Qwen", "Tongyi-MAI"], "github": ["QwenLM"] },
-    { "id": "xai", "name": "xAI", "hf": ["xai-org"], "github": ["xai-org"], "greenhouse": "xai" },
-    { "id": "huggingface", "name": "Hugging Face", "hf": ["HuggingFaceTB"], "github": ["huggingface"] },
-    { "id": "microsoft", "name": "Microsoft", "hf": ["microsoft"], "github": [] },
-    { "id": "nvidia", "name": "NVIDIA", "hf": ["nvidia"], "github": [] },
-    { "id": "apple", "name": "Apple", "hf": ["apple"], "github": [] },
-    { "id": "moonshot", "name": "Moonshot AI (Kimi)", "hf": ["moonshotai"], "github": ["MoonshotAI"] },
-    { "id": "zhipu", "name": "Z.ai / Zhipu (GLM)", "hf": ["zai-org"], "github": ["zai-org", "THUDM"] },
-    { "id": "minimax", "name": "MiniMax", "hf": ["MiniMaxAI"], "github": ["MiniMax-AI"] },
-    { "id": "bytedance_seed", "name": "ByteDance Seed", "hf": ["ByteDance-Seed"], "github": ["ByteDance-Seed"] },
-    { "id": "tencent", "name": "Tencent Hunyuan", "hf": ["tencent"], "github": ["Tencent-Hunyuan"] },
-    { "id": "baidu", "name": "Baidu", "hf": ["baidu"], "github": ["PaddlePaddle"] },
-    { "id": "xiaomi", "name": "Xiaomi MiMo", "hf": ["XiaomiMiMo"], "github": ["XiaomiMiMo"] },
-    { "id": "stepfun", "name": "StepFun", "hf": ["stepfun-ai"], "github": ["stepfun-ai"] },
-    { "id": "inclusionai", "name": "inclusionAI (Ant Group)", "hf": ["inclusionAI"], "github": ["inclusionAI"] },
-    { "id": "kyutai", "name": "Kyutai", "hf": ["kyutai"], "github": ["kyutai-labs"], "sirene_names": ["KYUTAI"] },
-    { "id": "allenai", "name": "Ai2", "hf": ["allenai"], "github": ["allenai"] },
-    { "id": "cohere", "name": "Cohere", "hf": ["CohereLabs"], "github": ["cohere-ai"], "ashby": "cohere" },
-    { "id": "stability", "name": "Stability AI", "hf": ["stabilityai"], "github": [] },
-    { "id": "bfl", "name": "Black Forest Labs", "hf": ["black-forest-labs"], "github": [] },
-    { "id": "ibm", "name": "IBM Granite", "hf": ["ibm-granite"], "github": [] },
-    { "id": "nous", "name": "Nous Research", "hf": ["NousResearch"], "github": ["NousResearch"] },
-    { "id": "ai21", "name": "AI21", "hf": ["ai21labs"], "github": ["ai21labs"] },
-    { "id": "perplexity", "name": "Perplexity", "hf": ["perplexity-ai"], "github": [], "ashby": "perplexity" },
-    { "id": "liquid", "name": "Liquid AI", "hf": ["LiquidAI"], "github": [] },
-    { "id": "cursor", "name": "Cursor", "hf": [], "github": [], "ashby": "cursor" },
-    { "id": "thinking_machines", "name": "Thinking Machines", "hf": [], "github": [], "ashby": "thinkingmachines" },
-    { "id": "scale", "name": "Scale AI", "hf": [], "github": [], "greenhouse": "scaleai" }
-  ]
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "hf": ["openai"],
+      "github": ["openai"],
+      "ashby": "openai",
+      "sirene": {
+        "q": "openai",
+        "match": "^OPENAI( |$)"
+      },
+      "edgar": "OpenAI"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "hf": [],
+      "github": ["anthropics"],
+      "greenhouse": "anthropic",
+      "sirene": {
+        "q": "anthropic",
+        "match": "^ANTHROPIC( |$)"
+      },
+      "edgar": "Anthropic"
+    },
+    {
+      "id": "google_deepmind",
+      "name": "Google DeepMind",
+      "hf": ["google"],
+      "github": ["google-deepmind", "google-research"],
+      "sirene": {
+        "q": "deepmind",
+        "match": "^DEEPMIND( |$)"
+      }
+    },
+    {
+      "id": "meta",
+      "name": "Meta AI",
+      "hf": ["meta-llama"],
+      "github": ["meta-llama", "facebookresearch"]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI",
+      "hf": ["mistralai"],
+      "github": ["mistralai"],
+      "ashby": "mistral.ai",
+      "sirene": {
+        "q": "mistral ai",
+        "match": "^MISTRAL AI( |$)"
+      },
+      "edgar": "Mistral AI"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "hf": ["deepseek-ai"],
+      "github": ["deepseek-ai"]
+    },
+    {
+      "id": "qwen",
+      "name": "Qwen (Alibaba)",
+      "hf": ["Qwen", "Tongyi-MAI"],
+      "github": ["QwenLM"]
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "hf": ["xai-org"],
+      "github": ["xai-org"],
+      "greenhouse": "xai",
+      "sirene": {
+        "q": "xai",
+        "match": "^XAI( |$)"
+      },
+      "edgar": "xAI"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "hf": ["HuggingFaceTB"],
+      "github": ["huggingface"],
+      "sirene": {
+        "q": "hugging face",
+        "match": "^HUGGING FACE( |$)"
+      }
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft",
+      "hf": ["microsoft"],
+      "github": []
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "hf": ["nvidia"],
+      "github": []
+    },
+    {
+      "id": "apple",
+      "name": "Apple",
+      "hf": ["apple"],
+      "github": []
+    },
+    {
+      "id": "moonshot",
+      "name": "Moonshot AI (Kimi)",
+      "hf": ["moonshotai"],
+      "github": ["MoonshotAI"]
+    },
+    {
+      "id": "zhipu",
+      "name": "Z.ai / Zhipu (GLM)",
+      "hf": ["zai-org"],
+      "github": ["zai-org", "THUDM"]
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "hf": ["MiniMaxAI"],
+      "github": ["MiniMax-AI"]
+    },
+    {
+      "id": "bytedance_seed",
+      "name": "ByteDance Seed",
+      "hf": ["ByteDance-Seed"],
+      "github": ["ByteDance-Seed"]
+    },
+    {
+      "id": "tencent",
+      "name": "Tencent Hunyuan",
+      "hf": ["tencent"],
+      "github": ["Tencent-Hunyuan"]
+    },
+    {
+      "id": "baidu",
+      "name": "Baidu",
+      "hf": ["baidu"],
+      "github": ["PaddlePaddle"]
+    },
+    {
+      "id": "xiaomi",
+      "name": "Xiaomi MiMo",
+      "hf": ["XiaomiMiMo"],
+      "github": ["XiaomiMiMo"]
+    },
+    {
+      "id": "stepfun",
+      "name": "StepFun",
+      "hf": ["stepfun-ai"],
+      "github": ["stepfun-ai"]
+    },
+    {
+      "id": "inclusionai",
+      "name": "inclusionAI (Ant Group)",
+      "hf": ["inclusionAI"],
+      "github": ["inclusionAI"]
+    },
+    {
+      "id": "kyutai",
+      "name": "Kyutai",
+      "hf": ["kyutai"],
+      "github": ["kyutai-labs"],
+      "sirene": {
+        "q": "kyutai",
+        "match": "^KYUTAI( |$)"
+      }
+    },
+    {
+      "id": "allenai",
+      "name": "Ai2",
+      "hf": ["allenai"],
+      "github": ["allenai"]
+    },
+    {
+      "id": "cohere",
+      "name": "Cohere",
+      "hf": ["CohereLabs"],
+      "github": ["cohere-ai"],
+      "ashby": "cohere",
+      "sirene": {
+        "q": "cohere",
+        "match": "^COHERE( |$)"
+      }
+    },
+    {
+      "id": "stability",
+      "name": "Stability AI",
+      "hf": ["stabilityai"],
+      "github": []
+    },
+    {
+      "id": "bfl",
+      "name": "Black Forest Labs",
+      "hf": ["black-forest-labs"],
+      "github": []
+    },
+    {
+      "id": "ibm",
+      "name": "IBM Granite",
+      "hf": ["ibm-granite"],
+      "github": []
+    },
+    {
+      "id": "nous",
+      "name": "Nous Research",
+      "hf": ["NousResearch"],
+      "github": ["NousResearch"]
+    },
+    {
+      "id": "ai21",
+      "name": "AI21",
+      "hf": ["ai21labs"],
+      "github": ["ai21labs"]
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "hf": ["perplexity-ai"],
+      "github": [],
+      "ashby": "perplexity",
+      "sirene": {
+        "q": "perplexity",
+        "match": "PERPLEXITY"
+      },
+      "edgar": "Perplexity AI"
+    },
+    {
+      "id": "liquid",
+      "name": "Liquid AI",
+      "hf": ["LiquidAI"],
+      "github": []
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "hf": [],
+      "github": [],
+      "ashby": "cursor",
+      "sirene": {
+        "q": "anysphere",
+        "match": "^ANYSPHERE( |$)"
+      },
+      "edgar": "Anysphere"
+    },
+    {
+      "id": "thinking_machines",
+      "name": "Thinking Machines",
+      "hf": [],
+      "github": [],
+      "ashby": "thinkingmachines",
+      "sirene": {
+        "q": "thinking machines",
+        "match": "^THINKING MACHINES( |$)"
+      },
+      "edgar": "Thinking Machines"
+    },
+    {
+      "id": "scale",
+      "name": "Scale AI",
+      "hf": [],
+      "github": [],
+      "greenhouse": "scaleai",
+      "sirene": {
+        "q": "scale ai",
+        "match": "^SCALE AI( |$)"
+      },
+      "edgar": "Scale AI"
+    },
+    {
+      "id": "elevenlabs",
+      "name": "ElevenLabs",
+      "hf": [],
+      "github": [],
+      "ashby": "elevenlabs"
+    },
+    {
+      "id": "ssi",
+      "name": "Safe Superintelligence",
+      "hf": [],
+      "github": [],
+      "edgar": "Safe Superintelligence"
+    },
+    {
+      "id": "reflection",
+      "name": "Reflection AI",
+      "hf": [],
+      "github": [],
+      "edgar": "Reflection AI"
+    },
+    {
+      "id": "figure",
+      "name": "Figure AI",
+      "hf": [],
+      "github": [],
+      "edgar": "Figure AI"
+    },
+    {
+      "id": "physical_intelligence",
+      "name": "Physical Intelligence",
+      "hf": [],
+      "github": [],
+      "edgar": "Physical Intelligence"
+    }
+  ],
+  "sirene_every_min": 120,
+  "jobs_every_min": 120,
+  "edgar_every_min": 60
 }

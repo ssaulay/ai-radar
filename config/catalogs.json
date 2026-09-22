@@ -1,34 +1,206 @@
 {
   "version": 1,
-  "note": "Catalogues à fuite (lot 5a) : on ne lit pas des articles mais des états (listes de modèles, de clés, d'URL, de composants) et l'apparition d'une clé est l'événement. Tout est API publique, fichier prévu pour les machines (sitemap, Markdown brut, JSON Statuspage) ou page autorisée par robots.txt (OpenRouter /stealth). Vérifié par appel le 22/09/2026. Les catalogues Hugging Face et GitHub par organisation sont générés depuis labs.json.",
+  "note": "Catalogues à fuite (lot 5a) : on ne lit pas des articles mais des états (listes de modèles, de clés, d'URL, de composants) et l'apparition d'une clé est l'événement. Tout est API publique, fichier prévu pour les machines (sitemap, Markdown brut, JSON Statuspage) ou page autorisée par robots.txt (OpenRouter /stealth). Vérifié par appel le 22/09/2026. Les catalogues Hugging Face et GitHub par organisation sont générés depuis labs.json. Sous-lot 5b : catégories Discourse, salons visibles des widgets Discord d'OpenAI et Hugging Face, événements Polymarket (Gamma API, bloquée en France : lue depuis le runner seulement). SIRENE, offres Ashby et Greenhouse et dépôts SEC Form D sont générés depuis labs.json.",
   "catalogs": [
-    { "id": "openrouter_stealth", "type": "openrouter_stealth", "url": "https://openrouter.ai/stealth", "every_min": 30, "note": "modèles anonymes absents de /api/v1/models ; date de création via /api/v1/models/stealth/{slug}/endpoints" },
-    { "id": "litellm_prices", "type": "litellm_prices", "repo": "BerriAI/litellm", "path": "model_prices_and_context_window.json", "every_min": 30, "note": "fichier de prix : identifiants Bedrock, Azure, Vertex et noms de code avant annonce ; clés openrouter/ ignorées (déjà couvertes)" },
-
-    { "id": "pulls_transformers", "type": "inference_pulls", "repo": "huggingface/transformers", "every_min": 30 },
-    { "id": "pulls_vllm", "type": "inference_pulls", "repo": "vllm-project/vllm", "every_min": 30 },
-    { "id": "pulls_sglang", "type": "inference_pulls", "repo": "sgl-project/sglang", "every_min": 30 },
-    { "id": "pulls_llamacpp", "type": "inference_pulls", "repo": "ggml-org/llama.cpp", "every_min": 30 },
-
-    { "id": "sitemap_openai_release", "type": "sitemap", "url": "https://openai.com/sitemap.xml/release/", "every_min": 30 },
-    { "id": "sitemap_openai_research", "type": "sitemap", "url": "https://openai.com/sitemap.xml/research/", "every_min": 30 },
-    { "id": "sitemap_openai_api", "type": "sitemap", "url": "https://openai.com/sitemap.xml/api/", "every_min": 30 },
-    { "id": "sitemap_openai_chatgpt", "type": "sitemap", "url": "https://openai.com/sitemap.xml/chatgpt/", "every_min": 30 },
-    { "id": "sitemap_openai_sora", "type": "sitemap", "url": "https://openai.com/sitemap.xml/sora/", "every_min": 30 },
-    { "id": "sitemap_openai_milestone", "type": "sitemap", "url": "https://openai.com/sitemap.xml/milestone/", "every_min": 30 },
-    { "id": "sitemap_openai_engineering", "type": "sitemap", "url": "https://openai.com/sitemap.xml/engineering/", "every_min": 60 },
-    { "id": "sitemap_openai_publication", "type": "sitemap", "url": "https://openai.com/sitemap.xml/publication/", "every_min": 60 },
-    { "id": "sitemap_openai_product", "type": "sitemap", "url": "https://openai.com/sitemap.xml/product/", "every_min": 60, "note": "1,2 Mo par lecture (alternates xhtml)" },
-    { "id": "sitemap_anthropic", "type": "sitemap", "url": "https://www.anthropic.com/sitemap.xml", "every_min": 30 },
-    { "id": "sitemap_deepmind", "type": "sitemap", "url": "https://deepmind.google/sitemap.xml", "every_min": 30 },
-    { "id": "sitemap_mistral", "type": "sitemap", "url": "https://mistral.ai/sitemap-0.xml", "every_min": 30 },
-    { "id": "sitemap_cursor", "type": "sitemap", "url": "https://cursor.com/sitemap.xml", "every_min": 60 },
-
-    { "id": "changelog_openai_api", "type": "changelog_md", "url": "https://platform.openai.com/docs/changelog.md", "every_min": 30 },
-    { "id": "changelog_gemini_api", "type": "changelog_md", "url": "https://ai.google.dev/gemini-api/docs/changelog.md.txt", "every_min": 30 },
-    { "id": "changelog_claude_platform", "type": "changelog_md", "url": "https://platform.claude.com/docs/en/release-notes/overview.md", "every_min": 30 },
-
-    { "id": "status_openai", "type": "status_components", "url": "https://status.openai.com/api/v2/components.json", "every_min": 30 },
-    { "id": "status_anthropic", "type": "status_components", "url": "https://status.anthropic.com/api/v2/components.json", "every_min": 30 }
+    {
+      "id": "openrouter_stealth",
+      "type": "openrouter_stealth",
+      "url": "https://openrouter.ai/stealth",
+      "every_min": 30,
+      "note": "modèles anonymes absents de /api/v1/models ; date de création via /api/v1/models/stealth/{slug}/endpoints"
+    },
+    {
+      "id": "litellm_prices",
+      "type": "litellm_prices",
+      "repo": "BerriAI/litellm",
+      "path": "model_prices_and_context_window.json",
+      "every_min": 30,
+      "note": "fichier de prix : identifiants Bedrock, Azure, Vertex et noms de code avant annonce ; clés openrouter/ ignorées (déjà couvertes)"
+    },
+    {
+      "id": "pulls_transformers",
+      "type": "inference_pulls",
+      "repo": "huggingface/transformers",
+      "every_min": 30
+    },
+    {
+      "id": "pulls_vllm",
+      "type": "inference_pulls",
+      "repo": "vllm-project/vllm",
+      "every_min": 30
+    },
+    {
+      "id": "pulls_sglang",
+      "type": "inference_pulls",
+      "repo": "sgl-project/sglang",
+      "every_min": 30
+    },
+    {
+      "id": "pulls_llamacpp",
+      "type": "inference_pulls",
+      "repo": "ggml-org/llama.cpp",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_release",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/release/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_research",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/research/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_api",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/api/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_chatgpt",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/chatgpt/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_sora",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/sora/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_milestone",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/milestone/",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_openai_engineering",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/engineering/",
+      "every_min": 60
+    },
+    {
+      "id": "sitemap_openai_publication",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/publication/",
+      "every_min": 60
+    },
+    {
+      "id": "sitemap_openai_product",
+      "type": "sitemap",
+      "url": "https://openai.com/sitemap.xml/product/",
+      "every_min": 60,
+      "note": "1,2 Mo par lecture (alternates xhtml)"
+    },
+    {
+      "id": "sitemap_anthropic",
+      "type": "sitemap",
+      "url": "https://www.anthropic.com/sitemap.xml",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_deepmind",
+      "type": "sitemap",
+      "url": "https://deepmind.google/sitemap.xml",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_mistral",
+      "type": "sitemap",
+      "url": "https://mistral.ai/sitemap-0.xml",
+      "every_min": 30
+    },
+    {
+      "id": "sitemap_cursor",
+      "type": "sitemap",
+      "url": "https://cursor.com/sitemap.xml",
+      "every_min": 60
+    },
+    {
+      "id": "changelog_openai_api",
+      "type": "changelog_md",
+      "url": "https://platform.openai.com/docs/changelog.md",
+      "every_min": 30
+    },
+    {
+      "id": "changelog_gemini_api",
+      "type": "changelog_md",
+      "url": "https://ai.google.dev/gemini-api/docs/changelog.md.txt",
+      "every_min": 30
+    },
+    {
+      "id": "changelog_claude_platform",
+      "type": "changelog_md",
+      "url": "https://platform.claude.com/docs/en/release-notes/overview.md",
+      "every_min": 30
+    },
+    {
+      "id": "status_openai",
+      "type": "status_components",
+      "url": "https://status.openai.com/api/v2/components.json",
+      "every_min": 30
+    },
+    {
+      "id": "status_anthropic",
+      "type": "status_components",
+      "url": "https://status.anthropic.com/api/v2/components.json",
+      "every_min": 30
+    },
+    {
+      "id": "discourse_openai",
+      "type": "discourse_categories",
+      "url": "https://community.openai.com/categories.json",
+      "every_min": 60
+    },
+    {
+      "id": "discourse_hf",
+      "type": "discourse_categories",
+      "url": "https://discuss.huggingface.co/categories.json",
+      "every_min": 60
+    },
+    {
+      "id": "discourse_cursor",
+      "type": "discourse_categories",
+      "url": "https://forum.cursor.com/categories.json",
+      "every_min": 60
+    },
+    {
+      "id": "discourse_perplexity",
+      "type": "discourse_categories",
+      "url": "https://community.perplexity.ai/categories.json",
+      "every_min": 60
+    },
+    {
+      "id": "discourse_googleai",
+      "type": "discourse_categories",
+      "url": "https://discuss.ai.google.dev/categories.json",
+      "every_min": 60
+    },
+    {
+      "id": "discord_openai",
+      "type": "discord_widget",
+      "guild": "974519864045756446",
+      "url": "https://discord.com/api/guilds/974519864045756446/widget.json",
+      "every_min": 60
+    },
+    {
+      "id": "discord_hf",
+      "type": "discord_widget",
+      "guild": "879548962464493619",
+      "url": "https://discord.com/api/guilds/879548962464493619/widget.json",
+      "every_min": 60
+    },
+    {
+      "id": "polymarket_ai",
+      "type": "polymarket_events",
+      "url": "https://gamma-api.polymarket.com/events?limit=100&closed=false&order=id&ascending=false",
+      "every_min": 60,
+      "runner_only": true,
+      "note": "bloqué en France (ANJ) ; testé et lu depuis le runner GitHub uniquement"
+    }
   ]
 }

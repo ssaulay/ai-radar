@@ -1,4 +1,4 @@
-// Catalogues a fuite (lot 5a) : on lit des etats (listes de modeles, de cles, d'URL, de composants) et l'apparition d'une cle
+// Catalogues a fuite (lots 5a et 5b) : on lit des etats (listes de modeles, de cles, d'URL, de composants) et l'apparition d'une cle
 // entre deux passages est l'evenement, date et explique, range dans weak_signals (detecteur D7). Rejouer le meme etat ne produit
 // rien : (detecteur, catalogue, cle) est unique. Aucun LLM. Premier passage : on amorce l'instantane sans evenement, sauf pour les
 // entrees qui portent leur propre horodatage et datent de moins de 48 h.
@@ -18,6 +18,7 @@ export function ensureWeakSchema(store) {
 CREATE TABLE IF NOT EXISTS catalog_snapshots(catalog_id TEXT PRIMARY KEY, taken_at TEXT, n INTEGER, state_json TEXT, meta_json TEXT);
 CREATE TABLE IF NOT EXISTS weak_signals(signal_id INTEGER PRIMARY KEY AUTOINCREMENT, detector TEXT NOT NULL, catalog_id TEXT, key TEXT NOT NULL, title TEXT, url TEXT, reason TEXT, entity TEXT, known_entity INTEGER, event_at TEXT, detected_at TEXT NOT NULL, raw_json TEXT, score REAL, shown INTEGER DEFAULT 0, UNIQUE(detector, catalog_id, key));
 CREATE INDEX IF NOT EXISTS idx_ws_detected ON weak_signals(detected_at);
+CREATE TABLE IF NOT EXISTS job_postings(board TEXT, job_id TEXT, title TEXT, department TEXT, team TEXT, location TEXT, published_at TEXT, url TEXT, first_seen_at TEXT, last_seen_at TEXT, PRIMARY KEY(board, job_id));
 `);
 }
 
@@ -116,6 +117,53 @@ export function parseStatusComponents(json) {
   return (json?.components ?? []).filter(c => c.id && c.name).map(c => ({ key: c.id, title: c.name, url: page, event_at: iso(c.created_at), extra: { group: !!c.group, group_id: c.group_id ?? null, status: c.status ?? null, description: c.description ?? null } }));
 }
 
+// ---- Sous-lot 5b : signaux entreprise ----
+
+// SIRENE (recherche-entreprises.api.gouv.fr) : creation d'une entite francaise portant le nom d'un labo. Personnes physiques exclues
+// (nature juridique 1000), nom filtre par expression reguliere sur le nom complet. Aucune donnee de dirigeant personne physique conservee.
+export function parseSirene(json, { match, lab }) {
+  const re = new RegExp(match, 'i');
+  return (json?.results ?? []).filter(r => r.siren && r.nature_juridique !== '1000' && re.test(r.nom_complet ?? '')).map(r => ({
+    key: r.siren, title: `${r.nom_complet} (SIREN ${r.siren})`, url: `https://annuaire-entreprises.data.gouv.fr/entreprise/${r.siren}`, event_at: iso(r.date_creation),
+    extra: { lab, commune: r.siege?.libelle_commune ?? null, activite: r.activite_principale ?? null, nature_juridique: r.nature_juridique ?? null, etat: r.etat_administratif ?? null, dirigeants_personnes_morales: (r.dirigeants ?? []).filter(d => d.type_dirigeant === 'personne morale').map(d => d.denomination).filter(Boolean).slice(0, 3) },
+  }));
+}
+
+// Offres d'emploi : Ashby (jobs[]) et Greenhouse (/departments avec jobs). On rend les postes (historises dans job_postings) et les equipes (cles du catalogue).
+export function parseAshbyJobs(json, board) {
+  const jobs = (json?.jobs ?? []).filter(j => j.id && j.title && j.isListed !== false).map(j => ({ job_id: String(j.id), title: j.title, department: j.department ?? null, team: j.team ?? null, location: j.location ?? null, published_at: iso(j.publishedAt), url: j.jobUrl ?? null }));
+  return { jobs, entries: teamEntries(jobs, board, `https://jobs.ashbyhq.com/${board}`) };
+}
+export function parseGreenhouseDepartments(json, board) {
+  const jobs = [];
+  for (const d of json?.departments ?? []) for (const j of d.jobs ?? []) if (j.id && j.title) jobs.push({ job_id: String(j.id), title: j.title, department: d.name ?? null, team: null, location: j.location?.name ?? null, published_at: iso(j.first_published ?? j.updated_at), url: j.absolute_url ?? null });
+  return { jobs, entries: teamEntries(jobs, board, `https://job-boards.greenhouse.io/${board}`) };
+}
+function teamEntries(jobs, board, url) {
+  const m = new Map();
+  for (const j of jobs) { const k = [j.department, j.team].filter(Boolean).join(' / '); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(j.title); }
+  return [...m.entries()].map(([k, titles]) => ({ key: `team:${k}`, title: k, url, event_at: null, extra: { board, n: titles.length, titles: titles.slice(0, 5) } }));
+}
+
+// EDGAR full-text search, Form D uniquement : les SPV nommes d'apres la cible apparaissent avant l'annonce d'un tour.
+export function parseEdgar(json, query) {
+  return (json?.hits?.hits ?? []).map(h => h._source ?? {}).filter(x => x.adsh).map(x => { const cik = (x.ciks ?? [])[0] ?? null; return { key: x.adsh, title: (x.display_names ?? [])[0] ?? x.adsh, url: cik ? `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${x.adsh.replace(/-/g, '')}/${x.adsh}-index.htm` : 'https://efts.sec.gov/LATEST/search-index?q=' + encodeURIComponent(query) + '&forms=D', event_at: iso(x.file_date), extra: { query, ciks: x.ciks ?? [], states: x.biz_states ?? [], form: x.form ?? 'D' } }; });
+}
+
+// Polymarket Gamma API : la creation d'un marche « quand sortira X » est l'alerte. Bloque en France, lu depuis le runner GitHub seulement.
+export const POLY_AI = /\b(AI|A\.I\.|GPT[- ]?\d*|OpenAI|ChatGPT|Anthropic|Claude|Gemini|DeepMind|Grok|xAI|Llama|Meta AI|DeepSeek|Qwen|Mistral|Nvidia|AGI|LLM|Sora|Midjourney|Hugging Face|Perplexity|Cursor|Copilot|model release|open[- ]source model)\b/i;
+export function parsePolymarketEvents(json) {
+  return (Array.isArray(json) ? json : json?.events ?? []).filter(e => e.id && e.title && POLY_AI.test(e.title)).map(e => ({ key: `event:${e.id}`, title: e.title, url: e.slug ? `https://polymarket.com/event/${e.slug}` : 'https://polymarket.com', event_at: iso(e.createdAt ?? e.creationDate ?? e.startDate), extra: { markets: (e.markets ?? []).length, end: e.endDate ?? null, volume: e.volume ?? null } }));
+}
+
+// Discourse : categories.json, une nouvelle categorie produit est un evenement. Discord : widget public, salons de scene visibles.
+export function parseDiscourseCategories(json, host) {
+  return (json?.category_list?.categories ?? []).filter(c => c.id && c.name).map(c => ({ key: `cat:${c.id}`, title: c.name, url: `https://${host}/c/${c.slug ?? ''}/${c.id}`, event_at: null, extra: { topics: c.topic_count ?? null, description: (c.description_text ?? '').slice(0, 200) } }));
+}
+export function parseDiscordWidget(json, guildId) {
+  return (json?.channels ?? []).filter(c => c.id && c.name).map(c => ({ key: `channel:${c.id}`, title: c.name, url: `https://discord.com/channels/${guildId}/${c.id}`, event_at: null, extra: { guild: json?.name ?? null, presence: json?.presence_count ?? null } }));
+}
+
 export function diffEntries(prevKeys, entries) { const prev = new Set(prevKeys ?? []); return entries.filter(e => !prev.has(e.key)); }
 
 // ---- Chargement et lecture ----
@@ -127,6 +175,10 @@ export function loadCatalogs(root) {
   for (const lab of labs.labs) {
     for (const org of lab.hf ?? []) out.push({ id: `hf_org_${org.toLowerCase()}`, type: 'hf_org', org, lab: lab.id, url: `https://huggingface.co/api/models?author=${encodeURIComponent(org)}&sort=createdAt&direction=-1&limit=${labs.hf_limit ?? 20}`, every_min: labs.hf_every_min ?? 30 });
     for (const org of lab.github ?? []) out.push({ id: `gh_org_${org.toLowerCase()}`, type: 'github_org', org, lab: lab.id, url: `https://api.github.com/orgs/${org}/repos?sort=created&direction=desc&per_page=${labs.github_limit ?? 20}&type=public`, every_min: labs.github_every_min ?? 60 });
+    if (lab.sirene) out.push({ id: `sirene_${lab.id}`, type: 'sirene', lab: lab.id, name: lab.name, match: lab.sirene.match, url: `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(lab.sirene.q)}&per_page=25`, every_min: labs.sirene_every_min ?? 120 });
+    if (lab.ashby) out.push({ id: `jobs_ashby_${lab.id}`, type: 'ashby_jobs', lab: lab.id, name: lab.name, board: lab.ashby, url: `https://api.ashbyhq.com/posting-api/job-board/${lab.ashby}?includeCompensation=false`, every_min: labs.jobs_every_min ?? 120 });
+    if (lab.greenhouse) out.push({ id: `jobs_greenhouse_${lab.id}`, type: 'greenhouse_jobs', lab: lab.id, name: lab.name, board: lab.greenhouse, url: `https://boards-api.greenhouse.io/v1/boards/${lab.greenhouse}/departments`, every_min: labs.jobs_every_min ?? 120 });
+    if (lab.edgar) out.push({ id: `edgar_${lab.id}`, type: 'edgar_form_d', lab: lab.id, name: lab.name, query: lab.edgar, url: `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent('"' + lab.edgar + '"')}&forms=D`, every_min: labs.edgar_every_min ?? 60 });
   }
   return out;
 }
@@ -149,6 +201,13 @@ async function fetchCatalog(cat, http, { secrets = {}, lex = null, prevMeta = nu
     case 'sitemap': { const r = await http(cat.url, { hostDelay: 1000, accept: 'application/xml, text/xml;q=0.9, */*;q=0.5' }); if (r.error) return { error: r.error }; return { entries: parseSitemap(r.body) }; }
     case 'changelog_md': { const r = await http(cat.url, { accept: 'text/markdown, text/plain;q=0.9, */*;q=0.5' }); if (r.error) return { error: r.error }; return { entries: parseChangelogMd(r.body) }; }
     case 'status_components': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parseStatusComponents(json(r)) }; }
+    case 'sirene': { const r = await http(cat.url, { hostDelay: 1000 }); if (r.error) return { error: r.error }; return { entries: parseSirene(json(r), { match: cat.match, lab: cat.lab }) }; }
+    case 'ashby_jobs': { const r = await http(cat.url); if (r.error) return { error: r.error }; return parseAshbyJobs(json(r), cat.board); }
+    case 'greenhouse_jobs': { const r = await http(cat.url); if (r.error) return { error: r.error }; return parseGreenhouseDepartments(json(r), cat.board); }
+    case 'edgar_form_d': { const r = await http(cat.url, { headers: { 'User-Agent': 'ai-radar research simon.saulay@brevo.com' }, hostDelay: 1000 }); if (r.error) return { error: r.error }; return { entries: parseEdgar(json(r), cat.query) }; }
+    case 'polymarket_events': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parsePolymarketEvents(json(r)) }; }
+    case 'discourse_categories': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parseDiscourseCategories(json(r), new URL(cat.url).hostname) }; }
+    case 'discord_widget': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parseDiscordWidget(json(r), cat.guild) }; }
     default: return { error: `UNKNOWN_TYPE ${cat.type}` };
   }
 }
@@ -175,9 +234,29 @@ export function describe(cat, e, { now, firstPass = false }) {
     case 'inference_pulls': return `PR d'inférence dans ${e.extra?.repo ?? cat.repo} ajoutant un modèle : ${e.extra?.candidate ?? e.entity}${e.extra?.known?.length ? ` (entité connue : ${e.extra.known.join(', ')})` : ' (nom inconnu du lexique)'}, ouverte le ${fmtDate(e.event_at)} par ${e.extra?.author ?? '?'}. Précédents : Qwen3 38 jours avant, DeepSeek V4 17 jours.`;
     case 'sitemap': return `Nouvelle URL dans le sitemap de ${hostOf(cat.url)} : ${e.url.replace(/^https?:\/\/[^/]+/, '')}${firstPass ? '' : ' (absente au passage précédent)'}.`;
     case 'changelog_md': return `Nouvelle entrée de changelog (${hostOf(cat.url)}) sous « ${e.extra?.heading ?? ''} » : ${(e.extra?.text ?? '').slice(0, 200)}`;
+    case 'sirene': return `Nouvelle entité au registre SIRENE au nom de ${cat.name ?? cat.lab} : ${e.title}, créée le ${fmtDate(e.event_at)}${e.extra?.commune ? `, ${e.extra.commune}` : ''}${e.extra?.activite ? `, activité ${e.extra.activite}` : ''}. Précédents : Anthropic France créée 261 jours avant l'annonce du bureau, OpenAI France 41 jours.`;
+    case 'ashby_jobs': case 'greenhouse_jobs': return e.key.startsWith('jobs:') ? `${e.extra.n} nouvelle(s) offre(s) chez ${cat.name ?? cat.lab} (${cat.type === 'ashby_jobs' ? 'Ashby' : 'Greenhouse'}) : ${e.extra.titles.map(t => `« ${t} »`).join(', ')}${e.extra.n > e.extra.titles.length ? ', ...' : ''}. Précédent : les offres robotique d'OpenAI ont précédé de 20 mois la confirmation publique.` : `Nouvelle équipe dans les offres de ${cat.name ?? cat.lab} : ${e.title} (${e.extra?.n ?? '?'} poste(s) : ${(e.extra?.titles ?? []).join(' ; ')}).`;
+    case 'edgar_form_d': return `Dépôt SEC Form D mentionnant ${cat.name ?? cat.lab} : ${e.title}, déposé le ${fmtDate(e.event_at)}${e.extra?.states?.length ? ` (${e.extra.states.join(', ')})` : ''}. Précédents : SPV Thinking Machines déposé 18 jours avant l'annonce, xAI 19 jours.`;
+    case 'polymarket_events': return `Nouveau marché Polymarket sur l'IA : ${e.title}, ${created}${e.extra?.markets ? ` (${e.extra.markets} question(s))` : ''}. Précédents : marché Gemini 3 ouvert 5 jours avant la sortie, GPT-5 3 jours.`;
+    case 'discourse_categories': return `Nouvelle catégorie sur le forum ${hostOf(cat.url)} : ${e.title}${e.extra?.topics !== null && e.extra?.topics !== undefined ? ` (${e.extra.topics} sujets)` : ''}.`;
+    case 'discord_widget': return `Nouveau salon visible dans le widget Discord de ${e.extra?.guild ?? cat.id} : ${e.title}.`;
     case 'status_components': return `Nouveau composant sur la page de statut ${hostOf(cat.url)} : ${e.title}${e.extra?.group ? ' (groupe)' : ''}, ${created}. Précédent : composant Claude Cowork créé 8 jours avant la disponibilité générale.`;
     default: return `Nouvelle entrée dans ${cat.id} : ${e.title}`;
   }
+}
+
+function ingestJobs(store, cat, jobs, { now, nowMs, firstPass }) {
+  const board = `${cat.type === 'ashby_jobs' ? 'ashby' : 'greenhouse'}:${cat.board}`;
+  const find = store.db.prepare('SELECT 1 FROM job_postings WHERE board=? AND job_id=?');
+  const ins = store.db.prepare('INSERT OR IGNORE INTO job_postings(board,job_id,title,department,team,location,published_at,url,first_seen_at,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const upd = store.db.prepare('UPDATE job_postings SET last_seen_at=?, title=? WHERE board=? AND job_id=?');
+  const fresh = [];
+  store.tx(() => { for (const j of jobs) { if (find.get(board, j.job_id)) upd.run(now, j.title, board, j.job_id); else { ins.run(board, j.job_id, j.title, j.department, j.team, j.location, j.published_at, j.url, now, now); fresh.push(j); } } });
+  // a l'amorcage, seuls les postes publies depuis moins de 48 h comptent ; ensuite tout nouveau poste
+  const kept = firstPass ? fresh.filter(j => j.published_at && nowMs - Date.parse(j.published_at) <= FIRST_PASS_WINDOW_H * 3600e3) : fresh;
+  if (!kept.length) return null;
+  const url = cat.type === 'ashby_jobs' ? `https://jobs.ashbyhq.com/${cat.board}` : `https://job-boards.greenhouse.io/${cat.board}`;
+  return { key: `jobs:${now.slice(0, 16)}`, title: `${kept.length} nouvelle(s) offre(s) chez ${cat.name ?? cat.lab}`, url, event_at: now, extra: { board, n: kept.length, titles: kept.slice(0, 6).map(j => j.title + (j.team || j.department ? ` (${j.team ?? j.department})` : '')), total: jobs.length } };
 }
 
 export async function catalogAll(store, http, { root = null, catalogs = null, lex = null, secrets = {}, only = null, force = false, now = store.now(), log = console.log } = {}) {
@@ -189,6 +268,8 @@ export async function catalogAll(store, http, { root = null, catalogs = null, le
     if (only && !only.includes(cat.id)) continue;
     if (!force && !dueNow(store, cat, now)) { summary.push({ catalog: cat.id, status: 'NOT_DUE' }); continue; }
     const t0 = Date.now();
+    // Polymarket est bloque en France : lu depuis le runner GitHub Actions seulement
+    if (cat.runner_only && process.env.GITHUB_ACTIONS !== 'true') { store.run('INSERT INTO source_runs(run_ts,source_id,status,items_seen,items_new,items_updated,ms,error) VALUES (?,?,?,?,?,?,?,?)', now, cat.id, 'SKIPPED', 0, 0, 0, 0, 'SKIPPED_RUNNER_ONLY'); summary.push({ catalog: cat.id, status: 'SKIPPED', error: 'SKIPPED_RUNNER_ONLY' }); continue; }
     const snap = store.get('SELECT * FROM catalog_snapshots WHERE catalog_id=?', cat.id);
     const prevMeta = snap?.meta_json ? JSON.parse(snap.meta_json) : null;
     let res; try { res = await fetchCatalog(cat, http, { secrets, lex, prevMeta }); } catch (e) { res = { error: `EXCEPTION ${e.message}` }; }
@@ -201,6 +282,8 @@ export async function catalogAll(store, http, { root = null, catalogs = null, le
     const firstPass = !snap;
     let fresh = firstPass ? entries : diffEntries(JSON.parse(snap.state_json), entries);
     if (fresh.length) await enrich(cat, fresh, http);
+    // offres d'emploi : historisees dans job_postings ; un seul evenement groupe par passage pour les nouveaux postes
+    if (res.jobs) { const g = ingestJobs(store, cat, res.jobs, { now, nowMs, firstPass }); if (g) fresh.push(g); }
     // amorcage : seules les entrees portant leur propre horodatage recent sortent ; une date heritee du commit (LiteLLM) ne compte pas
     if (firstPass) fresh = res.datedByCommit ? [] : fresh.filter(e => e.event_at && nowMs - Date.parse(e.event_at) <= FIRST_PASS_WINDOW_H * 3600e3);
     let created = 0;
