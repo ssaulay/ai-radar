@@ -25,7 +25,7 @@ async function fetchItems(src, http, secrets) {
   const many = async (urls, fn, extra = {}) => { const out = []; const errs = []; for (const u of urls) { const r = await http(u, opt); if (r.error) { errs.push(`${r.error} ${u}`); continue; } try { out.push(...fn(r, u)); } catch (e) { errs.push(`PARSE ${e.message} ${u}`); } } return { items: out, error: errs.length === urls.length ? errs.join(' | ') : null, warnings: errs }; };
   switch (src.type) {
     case 'rss': { const r = await http(fill(src.url, {}), opt); if (r.error) return { error: r.error }; return { items: P.parseFeed(r.body, src.url).map(i => ({ ...i, kind: src.kind ?? i.kind, lang: src.lang ?? i.lang ?? null })) }; }
-    case 'rss_multi': return many(src.urls, (r, u) => P.parseFeed(r.body, u).map(i => ({ ...i, kind: src.kind ?? i.kind, author: i.author ?? u.split('/').slice(3, 5).join('/') })));
+    case 'rss_multi': return many(src.urls, (r, u) => { const repo = u.split('/').slice(3, 5).join('/'); return P.parseFeed(r.body, u).map(i => ({ ...i, kind: src.kind ?? i.kind, author: i.author ?? repo, title: src.kind === 'RELEASE' && !i.title.includes(repo.split('/')[1]) ? `${repo} ${i.title}` : i.title })); });
     case 'hn_list': {
       const l = await http(src.url, opt); if (l.error) return { error: l.error };
       const ids = JSON.parse(l.body).slice(0, src.limit ?? 60);

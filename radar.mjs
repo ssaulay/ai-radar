@@ -6,6 +6,11 @@ import { loadEnv } from './src/core/env.mjs';
 import { openStore, purge } from './src/core/store.mjs';
 import { makeHttp } from './src/core/http.mjs';
 import { collectAll } from './src/collect/collect.mjs';
+import { loadLexicon } from './src/analyze/relevance.mjs';
+import { makeEmbedder } from './src/core/embed.mjs';
+import { clusterNewItems } from './src/analyze/cluster.mjs';
+import { scoreAll } from './src/analyze/score.mjs';
+import { renderAll } from './src/render/render.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 loadEnv(ROOT);
@@ -36,7 +41,22 @@ try {
     }, null, 2));
   } else if (cmd === 'purge') {
     console.log(JSON.stringify(purge(store, { itemDays: Number(args.days ?? 14) })));
+  } else if (cmd === 'recluster') {
+    store.db.exec('DELETE FROM cluster_items; DELETE FROM clusters; DELETE FROM cluster_scores; DELETE FROM cluster_briefs;'); console.log('clusters effacés (embeddings conservés) ; relancer analyze');
+  } else if (['cluster', 'score', 'render', 'analyze', 'run'].includes(cmd)) {
+    const lex = loadLexicon(ROOT); const now = store.now();
+    const embedder = makeEmbedder({ counters, forceHash: args['hash-embeddings'] === 'true' });
+    const stats = {};
+    if (cmd === 'run') { const r = await collectAll(store, http, { root: ROOT, secrets, force: args.force === 'true' }); stats.collect = { ok: r.summary.filter(s => s.status === 'OK').length, error: r.summary.filter(s => s.status === 'ERROR').length, new: r.summary.reduce((a, s) => a + (s.new ?? 0), 0) }; }
+    if (['cluster', 'analyze', 'run'].includes(cmd)) stats.cluster = await clusterNewItems(store, embedder, lex, { now });
+    let results = null;
+    if (['score', 'render', 'analyze', 'run'].includes(cmd)) { results = scoreAll(store, lex, { now, root: ROOT }); stats.topics = results.length; }
+    if (['render', 'analyze', 'run'].includes(cmd)) { stats.render = renderAll(store, results, { root: ROOT, now, stats: { ...stats, embed_usd: Number(counters.embedUsd?.toFixed(4) ?? 0), embed_tokens: counters.embedTokens ?? 0, requests: counters.requests } }); }
+    if (cmd === 'run') purge(store);
+    stats.embed_usd = Number((counters.embedUsd ?? 0).toFixed(4)); stats.embed_tokens = counters.embedTokens ?? 0; stats.seconds = Math.round((Date.now() - t0) / 1000);
+    console.log(JSON.stringify(stats, null, 2));
+    if (results) console.log(results.slice(0, 12).map((r, i) => `${String(i + 1).padStart(2)}. [${String(Math.round(r.score)).padStart(3)}] ${r.status.padEnd(12)} ${r.components.families.list.join('')}${' '.repeat(Math.max(0, 5 - r.components.families.list.length))} ${r.n_items}it  ${r.label.slice(0, 90)}`).join('\n'));
   } else {
-    console.log('Usage: node radar.mjs collect [--only id1,id2] [--force] | status | purge [--days 14]');
+    console.log('Usage: node radar.mjs collect [--only id1,id2] [--force] | cluster | score | render | analyze (cluster+score+render) | run (collect+analyze+purge) | status | purge [--days 14]   options: --hash-embeddings');
   }
 } finally { store.close(); }
