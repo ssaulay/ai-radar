@@ -56,7 +56,7 @@ try {
     if (cmd === 'run') { const r = await collectAll(store, http, { root: ROOT, secrets, force: args.force === 'true' }); stats.collect = { ok: r.summary.filter(s => s.status === 'OK').length, error: r.summary.filter(s => s.status === 'ERROR').length, new: r.summary.reduce((a, s) => a + (s.new ?? 0), 0) }; }
     if (['cluster', 'analyze', 'run'].includes(cmd)) stats.cluster = await clusterNewItems(store, embedder, lex, { now });
     let results = null;
-    if (['score', 'render', 'analyze', 'run'].includes(cmd)) { results = scoreAll(store, lex, { now, root: ROOT }); stats.topics = results.length; stats.press = await checkPress(store, http, results, lex, { now }); }
+    if (['score', 'render', 'analyze', 'run'].includes(cmd)) { results = scoreAll(store, lex, { now, root: ROOT }); stats.topics = results.length; stats.press = await checkPress(store, http, results, lex, { now, embedder }); }
     let briefs = new Map();
     if (['render', 'analyze', 'run'].includes(cmd) && results) {
       const providers = process.env.OPENAI_API_KEY ? [{ name: 'openai', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY, model: process.env.BRIEF_MODEL ?? 'gpt-5.4-nano', textChars: 20000, minGapMs: 0, inUsd: 0.20, outUsd: 1.25, free: false, reasoning: 'minimal' }] : [];

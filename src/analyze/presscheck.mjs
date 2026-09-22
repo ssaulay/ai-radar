@@ -1,7 +1,11 @@
 // Verification active du statut presse : pour les meilleurs sujets, une requete Google News figee (EN + FR, 7 jours),
 // rafraichie au plus une fois par heure. Le statut presse ne depend donc plus des seuls articles que le radar a collectes.
 import { parseFeed } from '../collect/parsers.mjs';
-import { normName } from '../core/text.mjs';
+import { normName, sha256 } from '../core/text.mjs';
+import { cosine, toBlob, fromBlob } from '../core/embed.mjs';
+
+// Un article ne compte que s'il parle du meme sujet : similarite d'embedding avec un item du sujet (meme seuil que le regroupement).
+export const PRESS_MATCH = 0.60;
 
 const GENERIC_TYPES = new Set(['TOPIC', 'REGULATION']);
 const CAP_WORD = /^[A-Z][A-Za-z0-9.+-]{1,}$|^[A-Z0-9][A-Z0-9.+-]{1,}$/; // Jev, TypeSafe, GPT-6, MiMo-V2.6
@@ -28,10 +32,11 @@ export function buildPressQuery(items, entities, lex, label = '') {
 const GENERIC_CAPS = new Set(['the', 'this', 'new', 'how', 'why', 'what', 'when', 'show', 'ask', 'tell', 'launch', 'introducing', 'announcing', 'meet', 'inside', 'here', 'from', 'with', 'and', 'for', 'openai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'update', 'release', 'releases', 'hn', 'pdf', 'video', 'thread']);
 
 export function ensurePressSchema(store) {
-  store.db.exec('CREATE TABLE IF NOT EXISTS press_checks(cluster_id INTEGER PRIMARY KEY, checked_at TEXT, query TEXT, total_7d INTEGER, last_24h INTEGER, first_at TEXT, last_at TEXT, sample_json TEXT);');
+  store.db.exec('CREATE TABLE IF NOT EXISTS press_checks(cluster_id INTEGER PRIMARY KEY, checked_at TEXT, query TEXT, total_7d INTEGER, last_24h INTEGER, first_at TEXT, last_at TEXT, sample_json TEXT, fetched_7d INTEGER); CREATE TABLE IF NOT EXISTS press_embeddings(url_hash TEXT PRIMARY KEY, vec BLOB, created_at TEXT);');
+  try { store.db.exec('ALTER TABLE press_checks ADD COLUMN fetched_7d INTEGER'); } catch {}
 }
 
-export async function checkPress(store, http, results, lex, { top = 40, maxAgeMin = 60, now = store.now(), log = console.log } = {}) {
+export async function checkPress(store, http, results, lex, { top = 40, maxAgeMin = 60, now = store.now(), log = console.log, embedder = null } = {}) {
   ensurePressSchema(store);
   const nowMs = Date.parse(now); let queried = 0, cached = 0;
   for (const r of results.slice(0, top)) {
@@ -41,13 +46,24 @@ export async function checkPress(store, http, results, lex, { top = 40, maxAgeMi
       const q = encodeURIComponent(`${query} when:7d`);
       const arts = [];
       for (const u of [`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`, `https://news.google.com/rss/search?q=${q}&hl=fr&gl=FR&ceid=FR:fr`]) { const res = await http(u, { hostDelay: 1500 }); if (!res.error) arts.push(...parseFeed(res.body, u)); }
-      const seen = new Set(); const uniq = arts.filter(a => { const k = a.url || a.external_id; if (seen.has(k)) return false; seen.add(k); return true; }).filter(a => a.published_at);
+      const seen = new Set(); let uniq = arts.filter(a => { const k = a.url || a.external_id; if (seen.has(k)) return false; seen.add(k); return true; }).filter(a => a.published_at);
+      const fetched = uniq.length;
+      // filtre thematique : garder les articles proches d'au moins un item du sujet
+      if (embedder && uniq.length) {
+        const members = store.all('SELECT e.vec FROM cluster_items ci JOIN embeddings e ON e.item_id=ci.item_id WHERE ci.cluster_id=?', r.cluster_id).map(x => fromBlob(x.vec));
+        if (members.length) {
+          const need = uniq.filter(a => !store.get('SELECT 1 FROM press_embeddings WHERE url_hash=?', sha256(a.url || a.title)));
+          if (need.length) { const vecs = await embedder.embed(need.map(a => a.title)); store.tx(() => need.forEach((a, k) => store.run('INSERT OR REPLACE INTO press_embeddings(url_hash,vec,created_at) VALUES (?,?,?)', sha256(a.url || a.title), toBlob(vecs[k]), now))); }
+          uniq = uniq.filter(a => { const v = fromBlob(store.get('SELECT vec FROM press_embeddings WHERE url_hash=?', sha256(a.url || a.title)).vec); let m = 0; for (const mv of members) { const c = cosine(v, mv); if (c > m) m = c; if (m >= PRESS_MATCH) break; } return m >= PRESS_MATCH; });
+        }
+      }
       const dates = uniq.map(a => a.published_at).sort();
-      row = { cluster_id: r.cluster_id, checked_at: now, query, total_7d: uniq.length, last_24h: uniq.filter(a => nowMs - Date.parse(a.published_at) <= 24 * 3600e3).length, first_at: dates[0] ?? null, last_at: dates[dates.length - 1] ?? null, sample_json: JSON.stringify(uniq.sort((a, b) => b.published_at.localeCompare(a.published_at)).slice(0, 5).map(a => ({ t: a.title.slice(0, 120), u: a.url, at: a.published_at, s: a.author }))) };
-      store.run('INSERT OR REPLACE INTO press_checks(cluster_id,checked_at,query,total_7d,last_24h,first_at,last_at,sample_json) VALUES (?,?,?,?,?,?,?,?)', row.cluster_id, row.checked_at, row.query, row.total_7d, row.last_24h, row.first_at, row.last_at, row.sample_json);
+      row = { cluster_id: r.cluster_id, checked_at: now, query, fetched_7d: fetched, total_7d: uniq.length, last_24h: uniq.filter(a => nowMs - Date.parse(a.published_at) <= 24 * 3600e3).length, first_at: dates[0] ?? null, last_at: dates[dates.length - 1] ?? null, sample_json: JSON.stringify(uniq.sort((a, b) => b.published_at.localeCompare(a.published_at)).slice(0, 5).map(a => ({ t: a.title.slice(0, 120), u: a.url, at: a.published_at, s: a.author }))) };
+      store.run('INSERT OR REPLACE INTO press_checks(cluster_id,checked_at,query,total_7d,last_24h,first_at,last_at,sample_json,fetched_7d) VALUES (?,?,?,?,?,?,?,?,?)', row.cluster_id, row.checked_at, row.query, row.total_7d, row.last_24h, row.first_at, row.last_at, row.sample_json, row.fetched_7d);
+      store.run('DELETE FROM press_embeddings WHERE created_at < ?', new Date(nowMs - 8 * 864e5).toISOString());
       queried++;
     } else cached++;
-    r.press_check = { query: row.query, total_7d: row.total_7d, last_24h: row.last_24h, first_at: row.first_at, last_at: row.last_at, checked_at: row.checked_at, sample: JSON.parse(row.sample_json ?? '[]') };
+    r.press_check = { query: row.query, fetched_7d: row.fetched_7d, total_7d: row.total_7d, last_24h: row.last_24h, first_at: row.first_at, last_at: row.last_at, checked_at: row.checked_at, sample: JSON.parse(row.sample_json ?? '[]') };
     // le statut combine les articles collectes par le radar et la verification active
     const total = Math.max(r.press_count ?? 0, row.total_7d ?? 0);
     r.press_count = total; if (row.first_at && (!r.first_press_at || row.first_at < r.first_press_at)) r.first_press_at = row.first_at;
