@@ -3,6 +3,7 @@
 // hit = au moins 3 articles publies apres t0 et aucun avant. Metriques : precision@10, avance mediane, par jour.
 import { parseFeed } from '../collect/parsers.mjs';
 import { normName } from '../core/text.mjs';
+import { buildPressQuery } from './presscheck.mjs';
 
 const HORIZONS = [24, 48, 72];
 
@@ -28,7 +29,7 @@ export function recordDetections(store, results, lex, { now }) {
     results.forEach((r, idx) => {
       const rank = idx + 1;
       const ex = store.get('SELECT best_rank, best_score FROM detections WHERE cluster_id=?', r.cluster_id);
-      if (!ex) store.run('INSERT INTO detections(cluster_id,first_seen_at,first_scored_at,score_first,best_rank,best_score,status_first,label,query) VALUES (?,?,?,?,?,?,?,?,?)', r.cluster_id, r.first_seen_at, now, r.score, rank, r.score, r.status, r.label, buildQuery(r.label, r.entities, lex.stop));
+      if (!ex) store.run('INSERT INTO detections(cluster_id,first_seen_at,first_scored_at,score_first,best_rank,best_score,status_first,label,query) VALUES (?,?,?,?,?,?,?,?,?)', r.cluster_id, r.first_seen_at, now, r.score, rank, r.score, r.status, r.label, buildPressQuery(r.items, r.entities, lex, r.label) || buildQuery(r.label, r.entities, lex.stop));
       else if (rank < ex.best_rank || r.score > ex.best_score) store.run('UPDATE detections SET best_rank=MIN(best_rank,?), best_score=MAX(best_score,?) WHERE cluster_id=?', rank, r.score, r.cluster_id);
     });
   });

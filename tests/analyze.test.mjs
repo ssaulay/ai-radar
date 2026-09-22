@@ -93,3 +93,18 @@ test('évaluation : requête presse figée, hit si 3 articles après et 0 avant,
   assert.equal(m.length, 1); assert.equal(m[0].precision_at_10, 0.5); assert.equal(m[0].lead_median_h, 3);
   s.close();
 });
+
+import { buildPressQuery, checkPress } from '../src/analyze/presscheck.mjs';
+test('requête presse : noms propres récurrents des titres avant les thèmes du lexique ; vérification active change le statut', async () => {
+  const items = [{ title: 'Jev introduces a new shape of LLM' }, { title: 'TypeSafe AI Jev vs. GPT-6 Astra' }, { title: 'Jev “System One” models: TypeSafe AI’s new LLM category' }];
+  const q = buildPressQuery(items, [{ e: 'Open weights' }, { e: 'Codex' }], lex, 'Jev introduces a new shape of LLM');
+  assert.ok(/^Jev\b/.test(q) && /TypeSafe/.test(q), q); assert.ok(!/Open weights/.test(q), q);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')); const s = mk(dir);
+  const r = { cluster_id: 7, label: 'Jev', entities: [], items, press_count: 0, status: 'ANTICIPATION' };
+  const art = (d, id) => `<item><title>A${id}</title><link>https://ex.com/${id}</link><guid>${id}</guid><pubDate>${new Date(Date.parse(NOW) - d * 864e5).toUTCString()}</pubDate></item>`;
+  const http = async () => ({ body: `<rss><channel>${art(1, 'a')}${art(2, 'b')}${art(4, 'c')}</channel></rss>` });
+  const res = await checkPress(s, http, [r], lex, { now: NOW, log: () => {} });
+  assert.equal(res.queried, 1); assert.equal(r.status, 'CONFIRMED'); assert.equal(r.press_count, 3); assert.equal(r.press_check.last_24h, 1);
+  const res2 = await checkPress(s, http, [r], lex, { now: NOW, log: () => {} }); assert.equal(res2.cached, 1);
+  s.close();
+});
