@@ -11,8 +11,8 @@ import { ensureWeakSchema } from '../collect/catalog.mjs';
 export const FAMILY_PRIOR = { A: 0.3, B: 0.35, C: 0.35, D: 0.4, E: 0.5, F: 0.3, H: 0.4 };
 export const PRIOR_STRENGTH = 8; // Beta(prior*8, (1-prior)*8) : huit observations valent le prior
 export const DAILY_BUDGET = 20, COOLDOWN_H = 72, TERM_WINDOW_D = 30, VOCAB_WINDOW_D = 90, ERLANG_P = 1e-4, LABEL_AFTER_H = 72;
-// « 0 puis 2 » suppose un passe de zeros : D2 attend 7 jours de corpus ; D6 attend 200 valeurs et 10 points au moins
-export const D2_MIN_DAYS = 7, D6_MIN_SAMPLES = 200, D6_MIN_POINTS = 10, D1_MIN_SAMPLES = 200;
+// « jamais vu » suppose un passe : D2 (termes) et D3 (paires) attendent 7 jours de corpus ; D6 attend 200 valeurs et 10 points au moins
+export const D2_MIN_DAYS = 7, D3_MIN_DAYS = 7, D6_MIN_SAMPLES = 200, D6_MIN_POINTS = 10, D1_MIN_SAMPLES = 200;
 const day = iso => iso.slice(0, 10);
 const hours = (a, b) => (Date.parse(a) - Date.parse(b)) / 3600e3;
 
@@ -146,7 +146,7 @@ export function weakPass(store, lex, { now = store.now(), root = null, log = con
       const from30 = day(new Date(nowMs - 30 * 864e5).toISOString());
       for (let i = 0; i < ents.length; i++) for (let j = i + 1; j < ents.length; j++) {
         const a = ents[i], b = ents[j]; const existed = getEP.get(a, b);
-        if (detect && !existed) {
+        if (detect && !existed && daysObserved >= D3_MIN_DAYS) {
           const na = mentions30.get(a, from30).n, nb = mentions30.get(b, from30).n;
           if (na >= 5 && nb >= 5) {
             const N = Math.max(1, totalMentions()); const surprise = Math.log2((N * N) / Math.max(1, na * nb)); const aa = adamicAdar(store, a, b);
@@ -194,7 +194,7 @@ export function weakPass(store, lex, { now = store.now(), root = null, log = con
   const daily = dailyPass(store, { now });
   const labels = labelOutcomes(store, { now });
   const selected = selectBudget(store, { now });
-  const stats = { items: items.length, first_pass: firstPass, days_observed: Number(daysObserved.toFixed(1)), d2_active: daysObserved >= D2_MIN_DAYS, detected: counts, inserted, selected: selected.length, daily, labels };
+  const stats = { items: items.length, first_pass: firstPass, days_observed: Number(daysObserved.toFixed(1)), d2_active: daysObserved >= D2_MIN_DAYS, d3_active: daysObserved >= D3_MIN_DAYS, detected: counts, inserted, selected: selected.length, daily, labels };
   store.run('INSERT OR REPLACE INTO weak_runs(ts,items,signals,selected,stats_json) VALUES (?,?,?,?,?)', now, items.length, inserted, selected.length, JSON.stringify(stats));
   log(`  signaux faibles : ${items.length} items, ${inserted} signaux (${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(', ') || 'aucun'}), ${selected.length} retenus aujourd'hui`);
   return { stats, selected };

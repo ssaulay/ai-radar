@@ -287,7 +287,7 @@ test('5c D2 : sans 7 jours de corpus, aucun « terme jamais vu » ne sort (le 0 
   const s = mkw();
   seedItems(s, [{ source: 'hn_algolia_ai', family: 'A', title: 'Quibbix launches inference chip', at: t(2.5) }, { source: 'blog_hf', family: 'F', title: 'Notes on Quibbix', at: t(1) }]);
   const r = weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
-  assert.equal(r.stats.d2_active, false); assert.equal(s.get("SELECT COUNT(*) n FROM weak_signals WHERE detector='D2'").n, 0);
+  assert.equal(r.stats.d2_active, false); assert.equal(r.stats.d3_active, false); assert.equal(s.get("SELECT COUNT(*) n FROM weak_signals WHERE detector IN ('D2','D3')").n, 0);
   s.close();
 });
 
