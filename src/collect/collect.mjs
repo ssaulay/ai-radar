@@ -83,7 +83,7 @@ export function upsertItems(store, src, items, runTs) {
   return { created, updated, latencyMedianMin: latencies.length ? Math.round(latencies[Math.floor(latencies.length / 2)]) : null };
 }
 
-function dueNow(store, src, runTs) {
+export function dueNow(store, src, runTs) {
   const last = store.get('SELECT run_ts FROM source_runs WHERE source_id=? AND status=\'OK\' ORDER BY run_ts DESC LIMIT 1', src.id)?.run_ts;
   if (!last) return true;
   return (Date.parse(runTs) - Date.parse(last)) / 60000 >= (src.every_min ?? 30) - 2;

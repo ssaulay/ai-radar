@@ -14,6 +14,7 @@ Radar gratuit des sujets IA qui émergent, pour repérer avant la presse ce qui 
 ```bash
 node radar.mjs collect            # collecte les sources dues (cadence par source dans config/sources.json)
 node radar.mjs collect --force    # toutes les sources, tout de suite
+node radar.mjs catalog            # catalogues à fuite (lot 5a), événements dans weak_signals
 node radar.mjs status             # items par famille et par source, dernier état de chaque source
 node radar.mjs purge --days 14    # supprime les items anciens
 node --test tests/*.test.mjs
@@ -44,6 +45,20 @@ node radar.mjs outcome --url https://www.linkedin.com/posts/... --impressions 42
 ```
 
 L'onglet « Publié » de la page liste les posts avec le score et le statut presse au moment de la publication, l'avance sur la presse, et les résultats saisis. À partir de 5 posts mesurés, il affiche des médianes par statut, langue et plateforme. Inspiré de la couche d'attribution du projet Easel (ZJU-REAL), sans publication automatique.
+
+## Signaux faibles (lot 5, mode fantôme)
+
+Le radar principal récompense la confirmation croisée et enterre par construction les signaux isolés. Le lot 5 les capte dans une vue séparée, à budget fixe, jugée sur le taux de détection précoce, sans baisser les seuils du radar. Pendant deux semaines rien n'est affiché : les signaux s'accumulent dans la table `weak_signals` et seront étiquetés à 72 h avant toute publication.
+
+**5a, catalogues à fuite** (`src/collect/catalog.mjs`, détecteur D7) : on ne lit pas des articles mais des états, et l'apparition d'une clé entre deux passages est l'événement, daté et expliqué. Catalogues (`config/catalogs.json`, organisations dans `config/labs.json`, slugs vérifiés par appel) : modèles stealth d'OpenRouter, clés du fichier de prix LiteLLM, dépôts Hugging Face et GitHub de 34 laboratoires, pull requests d'ajout de modèle dans transformers, vLLM, SGLang et llama.cpp, sitemaps d'OpenAI, Anthropic, DeepMind, Mistral et Cursor, changelogs Markdown des API OpenAI, Gemini et Claude, composants des pages de statut OpenAI et Anthropic. Tout est API publique, fichier prévu pour les machines ou page autorisée par robots.txt ; aucun LLM ; coût nul (environ 85 requêtes et 45 s par passage).
+
+```bash
+node radar.mjs catalog            # catalogues dus (cadence par catalogue)
+node radar.mjs catalog --force    # tous, tout de suite ; utile pour vérifier qu'un rejeu ne produit rien
+node radar.mjs catalog --only pulls_vllm,status_anthropic
+```
+
+Règles : le premier passage amorce l'instantané (`catalog_snapshots`) sans événement, sauf pour les entrées qui portent leur propre horodatage et datent de moins de 48 h ; rejouer le même état ne produit rien, la clé (détecteur, catalogue, clé) est unique ; un dépôt dont la date de création est très antérieure à sa première observation est signalé comme « rendu visible bien après sa création » (passage privé vers public, le précédent Gemma 3 : 11 jours d'avance). Les PR d'inférence sont retenues si le titre ajoute un modèle et cite un nom propre ; le nom est confronté au lexique (inconnu = plus intéressant). `catalog` fait partie de `run` et une panne de catalogue n'arrête jamais le passage.
 
 ## Production
 
