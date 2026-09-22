@@ -1,0 +1,15 @@
+{
+  "name": "ai-radar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Radar gratuit des sujets IA \u00e9mergents : collecte multi-sources, d\u00e9tection de burst, page statique.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "collect": "node radar.mjs collect",
+    "status": "node radar.mjs status"
+  }
+}

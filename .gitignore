@@ -1,0 +1,6 @@
+.env
+state/
+*.sqlite*
+node_modules/
+.DS_Store
+public/
