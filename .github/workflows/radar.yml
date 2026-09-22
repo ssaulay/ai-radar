@@ -2,7 +2,8 @@ name: radar
 
 on:
   schedule:
-    # toutes les 30 minutes, décalé des heures pleines où GitHub Actions accumule du retard
+    # toutes les 30 minutes, décalé des heures pleines où GitHub Actions accumule du retard.
+    # Réenregistré le 22/09/2026 : aucune exécution planifiée n'avait démarré après la création du dépôt.
     - cron: '7,37 * * * *'
   workflow_dispatch:
     inputs:
