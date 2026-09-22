@@ -68,7 +68,7 @@ export function parseInferencePulls(json, repo, lex) {
     if (!p.number || !p.title || /\[bot\]$/i.test(p.user?.login ?? '')) continue;
     const m = modelAddFromTitle(p.title); if (!m) continue;
     const known = lex ? extractEntities(p.title, lex) : [];
-    out.push({ key: `${repo}#${p.number}`, title: `${repo}#${p.number} ${p.title}`.slice(0, 300), url: p.html_url, event_at: iso(p.created_at), entity: known[0] ?? m.candidate, extra: { repo, author: p.user?.login ?? null, candidate: m.candidate, known: known, labels: (p.labels ?? []).map(l => l.name).slice(0, 5) } });
+    out.push({ key: `${repo}#${p.number}`, title: `${repo}#${p.number} ${p.title}`.slice(0, 300), url: p.html_url, event_at: iso(p.created_at), entity: m.candidate, extra: { repo, author: p.user?.login ?? null, candidate: m.candidate, known, labels: (p.labels ?? []).map(l => l.name).slice(0, 5) } });
   }
   return out;
 }
@@ -206,7 +206,7 @@ export async function catalogAll(store, http, { root = null, catalogs = null, le
     let created = 0;
     store.tx(() => {
       for (const e of fresh) {
-        const known = lex ? extractEntities(`${e.title} ${e.key}`, lex) : [];
+        const known = e.extra?.known ?? (lex ? extractEntities(`${e.title} ${e.key}`, lex) : []);
         const reason = describe(cat, e, { now, firstPass });
         const r = insert.run(DETECTOR, cat.id, e.key, (e.title ?? e.key).slice(0, 300), e.url ?? cat.url ?? null, reason.slice(0, 600), e.entity ?? known[0] ?? null, known.length ? 1 : 0, e.event_at ?? now, now, JSON.stringify({ type: cat.type, ...(e.extra ?? {}) }).slice(0, 2000));
         if (r.changes) { created++; events.push({ catalog: cat.id, key: e.key, event_at: e.event_at ?? now, reason }); }

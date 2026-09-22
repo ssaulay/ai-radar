@@ -42,7 +42,7 @@ test('PR d’inférence : « add Qwen3 » citant un nom inconnu du lexique est d
   const unknown = parseInferencePulls(pulls, 'vllm-project/vllm', noQwen);
   assert.equal(unknown.length, 1); assert.equal(unknown[0].key, 'vllm-project/vllm#1'); assert.equal(unknown[0].entity, 'Qwen3'); assert.deepEqual(unknown[0].extra.known, []);
   const known = parseInferencePulls(pulls, 'vllm-project/vllm', lex);
-  assert.equal(known[0].entity, 'Qwen'); assert.deepEqual(known[0].extra.known, ['Qwen']);
+  assert.equal(known[0].entity, 'Qwen3', 'l’entité reste le nom candidat du titre'); assert.deepEqual(known[0].extra.known, ['Qwen']);
 });
 
 test('sitemap et changelogs : entrées lisibles, clés stables d’une lecture à l’autre, liens et intro ignorés', () => {
@@ -67,7 +67,7 @@ test('catalogAll : amorçage sans événement sauf entrées datées de moins de 
   const state = {
     status: { page: { url: 'https://status.example.com' }, components: [{ id: 'a', name: 'API', created_at: '2026-01-01T00:00:00.000Z' }, { id: 'b', name: 'Cowork', created_at: t(2) }] },
     sitemap: '<urlset><url><loc>https://ex.com/index/one/</loc></url><url><loc>https://ex.com/index/two/</loc></url></urlset>',
-    pulls: [{ number: 7, title: '[Model] Add Zorblax-7B support', html_url: 'https://github.com/x/y/pull/7', created_at: t(1), user: { login: 'dev' } }],
+    pulls: [{ number: 7, title: '[Model] Add Zorblax-7B support', html_url: 'https://github.com/x/y/pull/7', created_at: t(1), user: { login: 'dev' } }, { number: 8, title: 'model : support Gemma4 DSpark draft backbone', html_url: 'https://github.com/x/y/pull/8', created_at: t(1), user: { login: 'dev' } }],
     commits: [{ sha: 'aaa', commit: { committer: { date: t(5) } } }],
     prices: { 'bedrock/foo-v1': { litellm_provider: 'bedrock' } },
   };
@@ -82,13 +82,15 @@ test('catalogAll : amorçage sans événement sauf entrées datées de moins de 
   const catalogs = [
     { id: 't_status', type: 'status_components', url: 'https://status.example.com/api/v2/components.json', every_min: 30 },
     { id: 't_sitemap', type: 'sitemap', url: 'https://ex.com/sitemap.xml', every_min: 30 },
-    { id: 't_pulls', type: 'inference_pulls', repo: 'x/y', every_min: 30 },
+    { id: 't_pulls', type: 'inference_pulls', repo: 'ggml-org/llama.cpp', every_min: 30 },
     { id: 't_litellm', type: 'litellm_prices', repo: 'BerriAI/litellm', path: 'model_prices_and_context_window.json', every_min: 30 },
   ];
   const opts = { catalogs, lex, now: NOW, log: () => {} };
   const r1 = await catalogAll(s, http, opts);
   assert.equal(r1.stats.catalogs_ok, 4); assert.equal(r1.stats.first_pass, 4);
-  assert.deepEqual(r1.events.map(e => e.key).sort(), ['b', 'x/y#7'], 'amorçage : seules les entrées datées de moins de 48 h sortent');
+  assert.deepEqual(r1.events.map(e => e.key).sort(), ['b', 'ggml-org/llama.cpp#7', 'ggml-org/llama.cpp#8'], 'amorçage : seules les entrées datées de moins de 48 h sortent');
+  const pr8 = s.get("SELECT * FROM weak_signals WHERE key='ggml-org/llama.cpp#8'");
+  assert.equal(pr8.known_entity, 0, 'la clé contient llama.cpp (entité du lexique) mais le modèle du titre est inconnu'); assert.equal(pr8.entity, 'Gemma4 DSpark'); assert.ok(/nom inconnu du lexique/.test(pr8.reason), pr8.reason);
   assert.equal(s.get('SELECT COUNT(*) n FROM catalog_snapshots').n, 4);
   const r2 = await catalogAll(s, http, { ...opts, force: true });
   assert.equal(r2.stats.events, 0, 'rejeu du même état : aucun événement');
@@ -111,7 +113,7 @@ test('catalogAll : amorçage sans événement sauf entrées datées de moins de 
   assert.ok(/Nouvelle URL dans le sitemap de ex\.com : \/index\/introducing-thing\//.test(sm.reason), sm.reason);
   const r5 = await catalogAll(s, http, { ...opts, now: later, force: true });
   assert.equal(r5.stats.events, 0, 'second rejeu : rien');
-  assert.equal(s.get('SELECT COUNT(*) n FROM weak_signals').n, 5);
+  assert.equal(s.get('SELECT COUNT(*) n FROM weak_signals').n, 6);
   assert.equal(s.get("SELECT n FROM catalog_snapshots WHERE catalog_id='t_status'").n, 3);
   s.close();
 });
