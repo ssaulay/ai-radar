@@ -25,9 +25,11 @@ export function buildPressQuery(items, entities, lex, label = '') {
   const minN = (items?.length ?? 0) >= 3 ? 2 : 1;
   const proper = [...freq.values()].filter(x => x.n >= minN).sort((a, b) => b.n - a.n).slice(0, 2).map(x => x.w);
   const named = (entities ?? []).map(e => e.e ?? e).filter(name => { const t = lex.entities.find(x => x.name === name)?.type; return t && !GENERIC_TYPES.has(t) && !proper.some(p => normName(name).includes(p.toLowerCase())); }).slice(0, 2 - Math.min(proper.length, 1));
-  let terms = [...proper.map(p => (/\s/.test(p) ? `"${p}"` : p)), ...named.map(n => `"${n}"`)];
+  // deux termes au plus : Google News combine en ET, un troisieme terme fait chuter le rappel
+  let terms = [...proper.map(p => (/\s/.test(p) ? `"${p}"` : p))];
+  if (terms.length < 2) terms.push(...named.map(n => `"${n}"`).slice(0, 2 - terms.length));
   if (terms.length < 2) terms.push(...normName(label).split(' ').filter(w => w.length > 3 && !lex.stop.has(w) && !terms.some(t => t.toLowerCase().includes(w))).slice(0, 2 - terms.length));
-  return terms.slice(0, 3).join(' ').trim();
+  return terms.slice(0, 2).join(' ').trim();
 }
 const GENERIC_CAPS = new Set(['the', 'this', 'new', 'how', 'why', 'what', 'when', 'show', 'ask', 'tell', 'launch', 'introducing', 'announcing', 'meet', 'inside', 'here', 'from', 'with', 'and', 'for', 'openai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'update', 'release', 'releases', 'hn', 'pdf', 'video', 'thread']);
 
