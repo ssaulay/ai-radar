@@ -108,3 +108,19 @@ test('requête presse : noms propres récurrents des titres avant les thèmes du
   const res2 = await checkPress(s, http, [r], lex, { now: NOW, log: () => {} }); assert.equal(res2.cached, 1);
   s.close();
 });
+
+import { markPublished, recordOutcome, publicationReport } from '../src/analyze/publish.mjs';
+test('journal de publication : mark conserve score et statut, outcome ajoute une mesure, stats à partir de 5 posts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')); const s = mk(dir);
+  for (let i = 1; i <= 5; i++) {
+    s.run("INSERT INTO clusters(cluster_id,n,first_seen_at,last_seen_at,label) VALUES (?,?,?,?,?)", i, 2, NOW, NOW, `Sujet ${i}`);
+    s.run("INSERT INTO cluster_scores(cluster_id,computed_at,score,components_json,status) VALUES (?,?,?,?,?)", i, NOW, 40 + i, JSON.stringify({ families: { list: ['A', 'F'] } }), i % 2 ? 'ANTICIPATION' : 'CONFIRMED');
+    const p = markPublished(s, { clusterId: i, url: `https://linkedin.com/posts/${i}`, lang: i % 2 ? 'fr' : 'en', now: NOW });
+    assert.equal(p.score_at_mark, 40 + i); assert.equal(p.families_at_mark, 'AF');
+    recordOutcome(s, { url: `https://linkedin.com/posts/${i}`, impressions: 1000 * i, reactions: 10 * i, now: NOW });
+  }
+  const rep = publicationReport(s);
+  assert.equal(rep.publications.length, 5); assert.equal(rep.stats.n, 5); assert.equal(rep.stats.median_impressions, 3000);
+  assert.throws(() => recordOutcome(s, { url: 'https://inconnu', impressions: 1 }));
+  s.close();
+});

@@ -34,6 +34,17 @@ node radar.mjs analyze      # cluster + score + render sans collecte
 node radar.mjs recluster    # efface les sujets (garde les embeddings) pour recalibrer
 ```
 
+## Profil et boucle de publication
+
+`config/profile.json` décrit le créateur (positionnement, audiences FR et EN, angles préférés, à éviter). Les briefs l'utilisent pour proposer un angle, deux accroches, une adéquation HIGH/MEDIUM/LOW, une différenciation par rapport à la presse et un risque. Le profil n'influence jamais le score.
+
+```bash
+node radar.mjs mark --cluster 9182 --url https://www.linkedin.com/posts/... --lang fr     # j'ai publié sur ce sujet
+node radar.mjs outcome --url https://www.linkedin.com/posts/... --impressions 4200 --reactions 61 --comments 9
+```
+
+L'onglet « Publié » de la page liste les posts avec le score et le statut presse au moment de la publication, l'avance sur la presse, et les résultats saisis. À partir de 5 posts mesurés, il affiche des médianes par statut, langue et plateforme. Inspiré de la couche d'attribution du projet Easel (ZJU-REAL), sans publication automatique.
+
 ## Production
 
 `.github/workflows/radar.yml` : GitHub Actions toutes les 30 minutes (`7,37 * * * *`), tests puis `run`, état sauvegardé sur la branche orpheline `state` (un seul commit, réécrit à chaque passage), page déployée sur GitHub Pages par artefact. Secrets attendus : `OPENAI_API_KEY` (embeddings, briefs), optionnels `BSKY_JWT`. `GITHUB_TOKEN` est fourni par Actions. Coût mesuré : environ 0,003 USD d'embeddings par analyse complète du corpus initial ; en régime de croisière quelques centimes par jour.

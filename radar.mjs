@@ -12,7 +12,8 @@ import { clusterNewItems } from './src/analyze/cluster.mjs';
 import { scoreAll } from './src/analyze/score.mjs';
 import { renderAll } from './src/render/render.mjs';
 import { makeLlm } from './src/core/llm.mjs';
-import { writeBriefs } from './src/analyze/brief.mjs';
+import { writeBriefs, loadProfile } from './src/analyze/brief.mjs';
+import { markPublished, recordOutcome, publicationReport } from './src/analyze/publish.mjs';
 import { recordDetections, evaluateDue, dailyMetrics } from './src/analyze/evaluate.mjs';
 import { checkPress } from './src/analyze/presscheck.mjs';
 
@@ -45,6 +46,10 @@ try {
     }, null, 2));
   } else if (cmd === 'purge') {
     console.log(JSON.stringify(purge(store, { itemDays: Number(args.days ?? 14) })));
+  } else if (cmd === 'mark') {
+    console.log(JSON.stringify(markPublished(store, { clusterId: Number(args.cluster), url: args.url, platform: args.platform ?? 'linkedin', lang: args.lang ?? 'fr', note: args.note ?? null }), null, 2));
+  } else if (cmd === 'outcome') {
+    console.log(JSON.stringify(recordOutcome(store, { url: args.url, impressions: args.impressions ? Number(args.impressions) : null, reactions: args.reactions ? Number(args.reactions) : null, comments: args.comments ? Number(args.comments) : null, reposts: args.reposts ? Number(args.reposts) : null }), null, 2));
   } else if (cmd === 'evaluate') {
     const r = await evaluateDue(store, http, { maxQueries: Number(args.max ?? 40) }); console.log(JSON.stringify({ ...r, metrics: dailyMetrics(store) }, null, 2));
   } else if (cmd === 'recluster') {
@@ -61,17 +66,17 @@ try {
     if (['render', 'analyze', 'run'].includes(cmd) && results) {
       const providers = process.env.OPENAI_API_KEY ? [{ name: 'openai', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY, model: process.env.BRIEF_MODEL ?? 'gpt-5.4-nano', textChars: 20000, minGapMs: 0, inUsd: 0.20, outUsd: 1.25, free: false, reasoning: 'minimal' }] : [];
       const llm = makeLlm(store, providers, { maxCalls: Number(process.env.BRIEF_MAX_CALLS ?? 40), counters });
-      const b = await writeBriefs(store, llm, results, { top: Number(process.env.BRIEF_TOP ?? 30), maxUsdPerRun: Number(process.env.BRIEF_MAX_USD ?? 0.05), now });
+      const b = await writeBriefs(store, llm, results, { top: Number(process.env.BRIEF_TOP ?? 30), maxUsdPerRun: Number(process.env.BRIEF_MAX_USD ?? 0.05), now, profile: loadProfile(ROOT) });
       briefs = b.briefs; stats.briefs = { generated: b.generated ?? 0, reused: b.reused ?? 0, skipped: b.skipped ?? null, llm_usd: Number((counters.llmUsd ?? 0).toFixed(4)) };
     }
     let metrics = [];
     if (results) { recordDetections(store, results, lex, { now }); if (['analyze', 'run'].includes(cmd)) stats.evaluate = await evaluateDue(store, http, { now }); metrics = dailyMetrics(store, { now }); }
-    if (['render', 'analyze', 'run'].includes(cmd)) { stats.render = renderAll(store, results, { root: ROOT, now, briefs, metrics, stats: { ...stats, embed_usd: Number(counters.embedUsd?.toFixed(4) ?? 0), embed_tokens: counters.embedTokens ?? 0, requests: counters.requests } }); }
+    if (['render', 'analyze', 'run'].includes(cmd)) { stats.render = renderAll(store, results, { root: ROOT, now, briefs, metrics, publications: publicationReport(store), stats: { ...stats, embed_usd: Number(counters.embedUsd?.toFixed(4) ?? 0), embed_tokens: counters.embedTokens ?? 0, requests: counters.requests } }); }
     if (cmd === 'run') purge(store);
     stats.embed_usd = Number((counters.embedUsd ?? 0).toFixed(4)); stats.embed_tokens = counters.embedTokens ?? 0; stats.seconds = Math.round((Date.now() - t0) / 1000);
     console.log(JSON.stringify(stats, null, 2));
     if (results) console.log(results.slice(0, 12).map((r, i) => `${String(i + 1).padStart(2)}. [${String(Math.round(r.score)).padStart(3)}] ${r.status.padEnd(12)} ${r.components.families.list.join('')}${' '.repeat(Math.max(0, 5 - r.components.families.list.length))} ${r.n_items}it  ${r.label.slice(0, 90)}`).join('\n'));
   } else {
-    console.log('Usage: node radar.mjs collect [--only id1,id2] [--force] | cluster | score | render | analyze (cluster+score+render) | run (collect+analyze+purge) | status | purge [--days 14]   options: --hash-embeddings');
+    console.log('Usage: node radar.mjs collect [--only id1,id2] [--force] | cluster | score | render | analyze | run | status | purge [--days 14] | evaluate | recluster\n       node radar.mjs mark --cluster <id> --url <lien du post> [--platform linkedin|x] [--lang fr|en] [--note ...]\n       node radar.mjs outcome --url <lien du post> [--impressions N] [--reactions N] [--comments N] [--reposts N]');
   }
 } finally { store.close(); }

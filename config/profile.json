@@ -1,0 +1,27 @@
+{
+  "note": "Profil créateur utilisé par les briefs. À éditer librement : chaque champ est injecté tel quel dans le prompt du brief. Rien ici n'influence le score.",
+  "identity": "Simon Saulay, product manager chez Brevo (plateforme CRM et marketing). Travaille sur des fonctionnalités IA produit : résumés de fiches, base de connaissances, agents. Regard de praticien produit, pas de chercheur ni de journaliste.",
+  "positioning": "Décrypter ce que les avancées IA changent concrètement pour les équipes produit, marketing et relation client. Relier une annonce technique à une décision produit ou à un usage métier. Ton direct, factuel, sans hype.",
+  "audiences": {
+    "fr": "LinkedIn francophone : product managers, marketeurs, dirigeants de PME et de scale-ups tech en France. Ils veulent comprendre vite et savoir quoi en faire.",
+    "en": "LinkedIn et X anglophones : PM, builders, personnes qui suivent l'IA appliquée. Niveau de référence : Hacker News, newsletters américaines. Être tôt compte plus qu'être exhaustif."
+  },
+  "preferred_angles": [
+    "ce que ça change pour un PM ou une équipe produit",
+    "impact sur le marketing, le CRM, la relation client, l'email",
+    "coût, faisabilité et adoption réelle plutôt que démo",
+    "souveraineté et écosystème européen quand c'est pertinent",
+    "ce que les chiffres disent vraiment, avec la source"
+  ],
+  "avoid": [
+    "superlatifs et annonces de révolution",
+    "reprendre un communiqué sans angle",
+    "spéculer sur des rumeurs non sourcées",
+    "sujets sans lien avec l'IA appliquée ou le produit"
+  ],
+  "formats": {
+    "linkedin_fr": "post de 120 à 220 mots, accroche en une ligne, une idée, une source",
+    "linkedin_en": "post court de 80 à 150 mots, direct, une source",
+    "x_en": "un fil de 2 à 4 posts ou un post unique, lien source"
+  }
+}
