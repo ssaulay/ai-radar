@@ -70,7 +70,9 @@ try {
       // catalogues a fuite (lot 5a) : isole, une panne ne stoppe pas le run
       try { const c = await catalogAll(store, http, { root: ROOT, lex, secrets, force: args.force === 'true' }); stats.catalog = c.stats; } catch (e) { stats.catalog = { error: e.message.slice(0, 200) }; }
     }
-    if (['cluster', 'analyze', 'run'].includes(cmd)) stats.cluster = await clusterNewItems(store, embedder, lex, { now });
+    // sans embeddings (cle OpenAI invalide, panne), on ne regroupe pas ce passage : pas de vecteurs de repli melanges aux vecteurs OpenAI ;
+    // les items restent en attente et seront regroupes au prochain passage reussi. La collecte, les catalogues, l'etat et la page continuent.
+    if (['cluster', 'analyze', 'run'].includes(cmd)) { try { stats.cluster = await clusterNewItems(store, embedder, lex, { now }); } catch (e) { stats.cluster = { error: e.message.slice(0, 200), pending: store.get("SELECT COUNT(*) n FROM items i LEFT JOIN cluster_items c ON c.item_id=i.item_id WHERE i.relevant=1 AND c.item_id IS NULL")?.n ?? null }; console.log(`  regroupement indisponible : ${e.message.slice(0, 120)} ; items en attente : ${stats.cluster.pending}`); } }
     let results = null;
     if (['score', 'render', 'analyze', 'run'].includes(cmd)) { results = scoreAll(store, lex, { now, root: ROOT }); stats.topics = results.length; stats.press = await checkPress(store, http, results, lex, { now, embedder }); }
     let briefs = new Map();
