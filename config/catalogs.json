@@ -200,7 +200,10 @@
       "url": "https://gamma-api.polymarket.com/events?limit=100&closed=false&order=id&ascending=false",
       "every_min": 60,
       "runner_only": true,
-      "note": "bloqué en France (ANJ) ; testé et lu depuis le runner GitHub uniquement"
+      "note": "bloqué en France (ANJ) ; testé et lu depuis le runner GitHub uniquement",
+      "extra_urls": [
+        "https://gamma-api.polymarket.com/events?tag_slug=ai&closed=false&limit=100&order=id&ascending=false"
+      ]
     }
   ]
 }

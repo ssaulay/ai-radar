@@ -196,3 +196,117 @@ test('5b loadCatalogs : SIRENE, Ashby, Greenhouse et EDGAR engendrés depuis lab
   assert.ok(cats.some(c => c.id === 'edgar_thinking_machines' && c.url.includes(encodeURIComponent('"Thinking Machines"'))));
   assert.ok(cats.some(c => c.id === 'polymarket_ai' && c.runner_only));
 });
+
+import { weakPass, properNouns, poissonTail3, adamicAdar, selectBudget, labelOutcomes, weakMetrics, ensureWeakAnalysisSchema } from '../src/analyze/weak.mjs';
+import { ensureClusterSchema } from '../src/analyze/cluster.mjs';
+import { ensureEvalSchema } from '../src/analyze/evaluate.mjs';
+import { ensurePressSchema } from '../src/analyze/presscheck.mjs';
+const mkw = () => { const s = mk(); ensureClusterSchema(s); ensureWeakAnalysisSchema(s); ensureEvalSchema(s); ensurePressSchema(s); return s; };
+const seedItems = (s, rows) => { let id = 1; s.tx(() => { for (const r of rows) { s.run("INSERT INTO items(item_id,source_id,family,kind,external_id,url,title,published_at,first_seen_at,last_seen_at,score_raw,relevant,evt_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)", id, r.source, r.family, 'STORY', `x${id}`, `https://ex.com/${id}`, r.title, r.at, r.at, r.at, r.score ?? null, r.at); id++; } }); return id - 1; };
+
+test('5c termes : noms propres et bigrammes, mots génériques et stop words exclus ; test d’Erlang', () => {
+  const p = properNouns('Sources: Thinking Machines Lab hires Jev team, says report about GPT-6', lex);
+  assert.ok(p.includes('Machines Lab') && p.includes('Jev') && p.includes('GPT-6'), JSON.stringify(p));
+  assert.ok(!p.includes('Thinking'), 'mot générique (thinking mode) : le lexique porte l’entité Thinking Machines');
+  assert.deepEqual(properNouns('Efficient Speculative Decoding for Large Language Models via Learned Drafters', lex), [], 'Title Case arXiv : aucun mot ordinaire retenu');
+  assert.deepEqual(properNouns('Qwen3-Next: Towards Ultimate Training and Inference Efficiency', lex), ['Qwen3-Next']);
+  assert.ok(!p.includes('Sources') && !p.includes('Report'), JSON.stringify(p));
+  assert.ok(poissonTail3(0.05) < 1e-4 && poissonTail3(1) > 0.05);
+});
+
+test('5c D2 : « 0 puis 2 » d’une seule famille ne sort pas ; 2 familles en 24 h sort ; un terme du lexique ne sort pas', () => {
+  const s = mkw();
+  // 10 jours d'historique sans le terme, puis deux mentions d'une seule famille (A), puis un autre terme avec deux familles
+  const rows = []; for (let d = 12; d >= 1; d--) rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Daily roundup of things', at: t(24 * d) });
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Zorblax announces a new model', at: t(3) }, { source: 'hn_new', family: 'A', title: 'Zorblax model is out', at: t(2) });
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Quibbix launches inference chip', at: t(2.5) }, { source: 'blog_hf', family: 'F', title: 'Notes on Quibbix', at: t(1) });
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'OpenAI ships something', at: t(1.5) }, { source: 'blog_openai', family: 'F', title: 'OpenAI ships something else', at: t(1) });
+  seedItems(s, rows);
+  const r = weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
+  const terms = s.all("SELECT key, reason FROM weak_signals WHERE detector='D2'");
+  assert.ok(!terms.some(x => x.key.startsWith('Zorblax')), 'une seule famille : pas de signal ' + JSON.stringify(terms));
+  assert.ok(terms.some(x => x.key.startsWith('Quibbix') && /2 familles indépendantes/.test(x.reason)), JSON.stringify(terms));
+  assert.ok(!terms.some(x => /OpenAI/.test(x.key)), 'entité du lexique : pas un terme jamais vu');
+  assert.ok(r.stats.selected <= 20);
+  s.close();
+});
+
+test('5c D2 Erlang : trois mentions en une heure d’un terme absent de 12 jours de corpus sort, même famille', () => {
+  const s = mkw();
+  const rows = []; for (let d = 12; d >= 1; d--) rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Daily roundup of things', at: t(24 * d) });
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Vexolith model appears', at: t(1) }, { source: 'hn_algolia_ai', family: 'A', title: 'Vexolith benchmarks leaked', at: t(0.7) }, { source: 'hn_algolia_ai', family: 'A', title: 'Vexolith weights on the hub', at: t(0.4) });
+  seedItems(s, rows);
+  weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
+  const v = s.get("SELECT reason FROM weak_signals WHERE detector='D2' AND key LIKE 'Vexolith|%'");
+  assert.ok(v && /test d'Erlang/.test(v.reason), JSON.stringify(v));
+  s.close();
+});
+
+test('5c D3 : une paire prédite par les voisins communs ne sort pas ; une paire inédite entre entités connues sort', () => {
+  const s = mkw();
+  const rows = [];
+  // OpenAI et Anthropic frequents, chacun co-cite avec Microsoft, NVIDIA, Google DeepMind (voisins communs) sur 10 jours
+  for (let d = 10; d >= 1; d--) { rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'OpenAI and Microsoft expand deal', at: t(24 * d + 5) }, { source: 'hn_algolia_ai', family: 'A', title: 'Anthropic and Microsoft sign', at: t(24 * d + 4) }, { source: 'hn_algolia_ai', family: 'A', title: 'OpenAI NVIDIA chips', at: t(24 * d + 3) }, { source: 'hn_algolia_ai', family: 'A', title: 'Anthropic NVIDIA chips', at: t(24 * d + 2) }, { source: 'hn_algolia_ai', family: 'A', title: 'OpenAI DeepMind rivalry', at: t(24 * d + 1.5) }, { source: 'hn_algolia_ai', family: 'A', title: 'Anthropic DeepMind hires', at: t(24 * d + 1.2) }, { source: 'hn_algolia_ai', family: 'A', title: 'Kyutai releases audio model', at: t(24 * d + 1) }, { source: 'hn_algolia_ai', family: 'A', title: 'Mistral AI ships update', at: t(24 * d + 0.8) }); }
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'OpenAI and Anthropic joint safety paper', at: t(1) }); // predite par 3 voisins communs
+  rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Kyutai and Mistral AI announce partnership', at: t(0.5) }); // inedite, aucun voisin commun
+  seedItems(s, rows);
+  weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
+  const pairs = s.all("SELECT key, reason FROM weak_signals WHERE detector='D3'");
+  assert.ok(!pairs.some(p => p.key === 'Anthropic|OpenAI'), 'paire prédite par voisins communs : pas de signal ' + JSON.stringify(pairs));
+  assert.ok(pairs.some(p => p.key === 'Kyutai|Mistral AI' && /non prédite par leurs voisins communs/.test(p.reason)), JSON.stringify(pairs));
+  s.close();
+});
+
+test('5c budget et 5d étiquetage : au plus 20 retenus par jour avec raison, rejeu sans doublon, étiquette à 72 h et métriques', () => {
+  const s = mkw();
+  const rows = []; for (let d = 12; d >= 1; d--) rows.push({ source: 'hn_algolia_ai', family: 'A', title: 'Daily roundup of things', at: t(24 * d) });
+  for (let k = 0; k < 30; k++) rows.push({ source: 'hn_algolia_ai', family: 'A', title: `Novaterm${k} launches product`, at: t(2) }, { source: 'blog_openai', family: 'F', title: `Novaterm${k} partnership`, at: t(1) });
+  seedItems(s, rows);
+  const r1 = weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
+  assert.ok(s.get("SELECT COUNT(*) n FROM weak_signals WHERE detector='D2'").n >= 25, 'trente termes à deux familles détectés');
+  assert.equal(r1.stats.selected, 20, 'budget journalier : 20');
+  assert.ok(s.all('SELECT w.reason FROM weak_selection sel JOIN weak_signals w ON w.signal_id=sel.signal_id').every(x => x.reason.length > 20));
+  const r2 = weakPass(s, lex, { now: new Date(Date.parse(NOW) + 60e3).toISOString(), root: ROOT, log: () => {} });
+  assert.equal(r2.stats.inserted, 0); assert.equal(r2.stats.selected, 0, 'rejeu : budget déjà consommé, aucun doublon');
+  const later = new Date(Date.parse(NOW) + 80 * 3600e3).toISOString();
+  s.run("INSERT INTO clusters(cluster_id,n,first_seen_at,last_seen_at,label) VALUES (1,2,?,?,'Novaterm0')", NOW, later);
+  const id0 = s.get("SELECT item_id FROM items WHERE title='Novaterm0 launches product'").item_id; s.run('INSERT INTO cluster_items(cluster_id,item_id,joined_at,sim) VALUES (1,?,?,1)', id0, NOW);
+  s.run("UPDATE weak_signals SET cluster_id=1 WHERE key LIKE 'Novaterm0|%'");
+  s.run("INSERT INTO detections(cluster_id,first_seen_at,first_scored_at,score_first,best_rank,best_score,status_first,label,query) VALUES (1,?,?,50,5,50,'ANTICIPATION','Novaterm0','q')", NOW, new Date(Date.parse(NOW) + 5 * 3600e3).toISOString());
+  const lab = labelOutcomes(s, { now: later });
+  assert.ok(lab.labeled >= 30 && lab.confirmed >= 1, JSON.stringify(lab));
+  const o = s.get("SELECT o.* FROM weak_signal_outcomes o JOIN weak_signals w ON w.signal_id=o.signal_id WHERE w.key LIKE 'Novaterm0|%'");
+  assert.equal(o.outcome, 'CONFIRMED'); assert.equal(o.via, 'TOP20'); assert.equal(o.lead_h, 5);
+  const m = weakMetrics(s, { now: later });
+  const d2 = m.by_detector.find(x => x.detector === 'D2'); assert.ok(d2.labeled >= 30 && d2.confirmed >= 1 && d2.confirmation_rate !== null, JSON.stringify(m));
+  const st = s.get("SELECT * FROM source_stats WHERE source_id='blog_openai'"); assert.ok(st.credibility > 0 && st.credibility < 1, JSON.stringify(st));
+  s.close();
+});
+
+test('5c D2 : sans 7 jours de corpus, aucun « terme jamais vu » ne sort (le 0 puis 2 exige un passé de zéros)', () => {
+  const s = mkw();
+  seedItems(s, [{ source: 'hn_algolia_ai', family: 'A', title: 'Quibbix launches inference chip', at: t(2.5) }, { source: 'blog_hf', family: 'F', title: 'Notes on Quibbix', at: t(1) }]);
+  const r = weakPass(s, lex, { now: NOW, root: ROOT, log: () => {} });
+  assert.equal(r.stats.d2_active, false); assert.equal(s.get("SELECT COUNT(*) n FROM weak_signals WHERE detector='D2'").n, 0);
+  s.close();
+});
+
+import { renderAll } from '../src/render/render.mjs';
+import { weakPageData } from '../src/analyze/weak.mjs';
+test('5d rendu : en mode fantôme aucune ligne ni onglet, radar.json ne porte que des compteurs ; après la date, onglet et lignes avec taux', () => {
+  const s = mkw(); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-weak-render-'));
+  s.run("INSERT INTO weak_signals(detector,catalog_id,key,title,url,reason,event_at,detected_at,score) VALUES ('D7','status_openai','c9','Composant secret','https://status.openai.com','Nouveau composant sur la page de statut : Composant secret RAISON-UNIQUE',?,?,2.1)", NOW, NOW);
+  s.run("INSERT INTO weak_selection(day,signal_id,rank,score) VALUES (?,1,1,2.1)", NOW.slice(0, 10));
+  const ghost = weakPageData(s, { now: NOW }); assert.equal(ghost.mode, 'ghost'); assert.deepEqual(ghost.rows, []);
+  renderAll(s, [], { root: dir, now: NOW, weak: ghost });
+  const html = fs.readFileSync(path.join(dir, 'public', 'index.html'), 'utf8'); const json = JSON.parse(fs.readFileSync(path.join(dir, 'public', 'radar.json'), 'utf8'));
+  assert.ok(!html.includes('RAISON-UNIQUE') && !html.includes('data-view="faibles"'), 'mode fantôme : rien d’affiché');
+  assert.equal(json.weak_signals.mode, 'ghost'); assert.equal(json.weak_signals.rows, undefined); assert.equal(json.weak_signals.selected_today, 1);
+  const after = '2026-10-07T09:00:00.000Z';
+  s.run("UPDATE weak_selection SET day=?", after.slice(0, 10));
+  const vis = weakPageData(s, { now: after }); assert.equal(vis.mode, 'visible'); assert.equal(vis.rows.length, 1);
+  renderAll(s, [], { root: dir, now: after, weak: vis });
+  const html2 = fs.readFileSync(path.join(dir, 'public', 'index.html'), 'utf8');
+  assert.ok(html2.includes('data-view="faibles"') && html2.includes('RAISON-UNIQUE') && html2.includes('en attente (72 h)'), 'mode visible : onglet et ligne');
+  s.close();
+});

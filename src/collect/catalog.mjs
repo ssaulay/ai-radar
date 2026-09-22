@@ -205,7 +205,14 @@ async function fetchCatalog(cat, http, { secrets = {}, lex = null, prevMeta = nu
     case 'ashby_jobs': { const r = await http(cat.url); if (r.error) return { error: r.error }; return parseAshbyJobs(json(r), cat.board); }
     case 'greenhouse_jobs': { const r = await http(cat.url); if (r.error) return { error: r.error }; return parseGreenhouseDepartments(json(r), cat.board); }
     case 'edgar_form_d': { const r = await http(cat.url, { headers: { 'User-Agent': 'ai-radar research simon.saulay@brevo.com' }, hostDelay: 1000 }); if (r.error) return { error: r.error }; return { entries: parseEdgar(json(r), cat.query) }; }
-    case 'polymarket_events': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parsePolymarketEvents(json(r)) }; }
+    case 'polymarket_events': {
+      // deux lectures : les derniers evenements crees, et ceux etiquetes IA ; l'instantane garde des comptes bruts et des titres temoins
+      // pour diagnostiquer le format depuis le runner (l'API est injoignable depuis la France).
+      const urls = [cat.url, ...(cat.extra_urls ?? [])]; const all = []; const meta = { raw: [], sample: [] }; let errors = 0;
+      for (const u of urls) { const r = await http(u); if (r.error) { errors++; meta.raw.push(r.error); continue; } let j; try { j = json(r); } catch { meta.raw.push('PARSE'); continue; } const arr = Array.isArray(j) ? j : j?.events ?? j?.data ?? []; meta.raw.push(arr.length); meta.sample.push(...arr.slice(0, 3).map(e => String(e.title ?? e.question ?? Object.keys(e).slice(0, 5).join(',')).slice(0, 80))); all.push(...arr); }
+      if (errors === urls.length) return { error: String(meta.raw[0]) };
+      const seen = new Set(); return { entries: parsePolymarketEvents(all).filter(e => { if (seen.has(e.key)) return false; seen.add(e.key); return true; }), meta };
+    }
     case 'discourse_categories': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parseDiscourseCategories(json(r), new URL(cat.url).hostname) }; }
     case 'discord_widget': { const r = await http(cat.url); if (r.error) return { error: r.error }; return { entries: parseDiscordWidget(json(r), cat.guild) }; }
     default: return { error: `UNKNOWN_TYPE ${cat.type}` };
