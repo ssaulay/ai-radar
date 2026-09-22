@@ -22,7 +22,7 @@ function fill(url, ctx) { return url.replace('{{DATE_MINUS_30}}', new Date(Date.
 
 async function fetchItems(src, http, secrets) {
   const opt = { hostDelay: src.host_delay_ms ?? undefined };
-  const many = async (urls, fn, extra = {}) => { const out = []; const errs = []; for (const u of urls) { const r = await http(u, opt); if (r.error) { errs.push(`${r.error} ${u}`); continue; } try { out.push(...fn(r, u)); } catch (e) { errs.push(`PARSE ${e.message} ${u}`); } } return { items: out, error: errs.length === urls.length ? errs.join(' | ') : null, warnings: errs }; };
+  const many = async (urls, fn, extra = {}) => { const out = []; const errs = []; for (const u of urls) { const r = await http(u, { ...opt, ...extra }); if (r.error) { errs.push(`${r.error} ${u}`); continue; } try { out.push(...fn(r, u)); } catch (e) { errs.push(`PARSE ${e.message} ${u}`); } } return { items: out, error: errs.length === urls.length ? errs.join(' | ') : null, warnings: errs }; };
   switch (src.type) {
     case 'rss': { const r = await http(fill(src.url, {}), opt); if (r.error) return { error: r.error }; return { items: P.parseFeed(r.body, src.url).map(i => ({ ...i, kind: src.kind ?? i.kind, lang: src.lang ?? i.lang ?? null })) }; }
     case 'rss_multi': return many(src.urls, (r, u) => { const repo = u.split('/').slice(3, 5).join('/'); return P.parseFeed(r.body, u).map(i => ({ ...i, kind: src.kind ?? i.kind, author: i.author ?? repo, title: src.kind === 'RELEASE' && !i.title.includes(repo.split('/')[1]) ? `${repo} ${i.title}` : i.title })); });
@@ -89,7 +89,17 @@ function dueNow(store, src, runTs) {
   return (Date.parse(runTs) - Date.parse(last)) / 60000 >= (src.every_min ?? 30) - 2;
 }
 
+// Session Bluesky a partir d'un compte gratuit et d'un mot de passe d'application ; jeton valable pour la duree du run.
+export async function bskySession(http, { handle = process.env.BSKY_HANDLE, appPassword = process.env.BSKY_APP_PASSWORD } = {}) {
+  if (!handle || !appPassword) return null;
+  try {
+    const r = await fetch('https://bsky.social/xrpc/com.atproto.server.createSession', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: handle, password: appPassword }), signal: AbortSignal.timeout(15000) });
+    const j = await r.json(); return j.accessJwt ?? null;
+  } catch { return null; }
+}
+
 export async function collectAll(store, http, { root, secrets = {}, only = null, force = false, log = console.log }) {
+  if (!secrets.BSKY_JWT) { const jwt = await bskySession(http); if (jwt) secrets.BSKY_JWT = jwt; }
   const cfg = JSON.parse(fs.readFileSync(path.join(root, 'config', 'sources.json'), 'utf8'));
   const runTs = store.now(); const summary = [];
   for (const src of cfg.sources) {

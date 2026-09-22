@@ -4,7 +4,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 export function makeLlm(store, providers, { runId = null, maxCalls = Infinity, counters = {} } = {}) {
   const ctx = { runId };
   const lastAt = new Map(); counters.llmCalls = counters.llmCalls ?? 0; counters.llmUsd = counters.llmUsd ?? 0;
-  if (!providers.length) return { enabled: false, ctx, json: async () => ({ error: 'LLM_DISABLED' }), provider: null };
+  if (!providers.length) return { enabled: false, ctx, counters, json: async () => ({ error: 'LLM_DISABLED' }), provider: null };
   const prov = providers[0];
 
   async function json(purpose, messages, { documentUrl = null, textChars = prov.textChars, maxOut = 4000, attempt = 0 } = {}) {
@@ -34,5 +34,5 @@ export function makeLlm(store, providers, { runId = null, maxCalls = Infinity, c
       return { error: `LLM_ERROR ${e.name}` };
     }
   }
-  return { enabled: true, ctx, provider: prov, json };
+  return { enabled: true, ctx, provider: prov, json, counters };
 }

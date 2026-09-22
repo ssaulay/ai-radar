@@ -49,7 +49,8 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BSKY_JWT: ${{ secrets.BSKY_JWT }}
+          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then node radar.mjs run --force; else node radar.mjs run; fi
 

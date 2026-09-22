@@ -75,3 +75,21 @@ test('burst : un terme vu 0 puis 2 fois ne déclenche pas ; 12 fois contre 1 par
   const q = termBurst(s, 'quiet topic', { now: NOW }); assert.equal(q.current, 2);
   s.close();
 });
+
+import { recordDetections, evaluateDue, dailyMetrics, buildQuery } from '../src/analyze/evaluate.mjs';
+test('évaluation : requête presse figée, hit si 3 articles après et 0 avant, précision@10 et avance', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')); const s = mk(dir);
+  assert.equal(buildQuery('Anthropic releases Claude 5 agents', [{ e: 'Anthropic' }, { e: 'Claude' }], lex.stop), '"Anthropic" "Claude" agents');
+  const t0 = new Date(Date.parse(NOW) - 50 * 3600e3).toISOString();
+  const results = [{ cluster_id: 1, first_seen_at: t0, score: 60, status: 'ANTICIPATION', label: 'Anthropic releases Claude 5', entities: [{ e: 'Anthropic' }], items: [] }, { cluster_id: 2, first_seen_at: t0, score: 40, status: 'ANTICIPATION', label: 'Quiet topic nobody covers', entities: [], items: [] }];
+  recordDetections(s, results, lex, { now: t0 });
+  const art = (h, id) => `<item><title>Art ${id}</title><link>https://ex.com/${id}</link><guid>${id}</guid><pubDate>${new Date(Date.parse(t0) + h * 3600e3).toUTCString()}</pubDate></item>`;
+  const http = async url => ({ body: /Anthropic/.test(decodeURIComponent(url)) ? `<rss><channel>${art(3, 'a')}${art(5, 'b')}${art(20, 'c')}</channel></rss>` : '<rss><channel></channel></rss>' });
+  const r = await evaluateDue(s, http, { now: NOW, log: () => {} });
+  assert.equal(r.evaluated, 2);
+  const e1 = s.get('SELECT * FROM evaluations WHERE cluster_id=1 AND horizon_h=48'); assert.equal(e1.hit, 1); assert.equal(e1.press_after, 3); assert.equal(e1.press_before, 0);
+  const e2 = s.get('SELECT * FROM evaluations WHERE cluster_id=2 AND horizon_h=48'); assert.equal(e2.hit, 0);
+  const m = dailyMetrics(s, { now: NOW });
+  assert.equal(m.length, 1); assert.equal(m[0].precision_at_10, 0.5); assert.equal(m[0].lead_median_h, 3);
+  s.close();
+});

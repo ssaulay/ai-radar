@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS score_snapshots(source_id TEXT, external_id TEXT, ts 
 CREATE TABLE IF NOT EXISTS source_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, run_ts TEXT, source_id TEXT, status TEXT, items_seen INTEGER, items_new INTEGER, items_updated INTEGER, ms INTEGER, error TEXT, latency_median_min REAL);
 CREATE TABLE IF NOT EXISTS cursors(source_id TEXT PRIMARY KEY, cursor TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS runs(run_id TEXT PRIMARY KEY, started_at TEXT, ended_at TEXT, step TEXT, stats_json TEXT);
+CREATE TABLE IF NOT EXISTS llm_calls(id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT, purpose TEXT, provider TEXT, model TEXT, document_url TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, ms INTEGER, ok INTEGER, error TEXT, created_at TEXT);
 `;
 
 export function openStore(root, file = 'radar.sqlite') {
