@@ -14,7 +14,8 @@ export function cosine(a, b) { let s = 0; const n = Math.min(a.length, b.length)
 export const toBlob = v => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 export const fromBlob = b => new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4);
 
-export function makeEmbedder({ apiKey = process.env.OPENAI_API_KEY, model = 'text-embedding-3-small', dim = 1536, counters = {}, forceHash = false } = {}) {
+export function makeEmbedder({ apiKey = process.env.OPENAI_API_KEY, model = 'text-embedding-3-small', dim = 512, counters = {}, forceHash = false } = {}) {
+  // 512 dimensions suffisent pour des titres et divisent l'etat par trois par rapport a 1536
   counters.embedTokens = counters.embedTokens ?? 0; counters.embedUsd = counters.embedUsd ?? 0; counters.embedCalls = counters.embedCalls ?? 0;
   if (!apiKey || forceHash) return { name: 'hash', dim: 512, embed: async texts => texts.map(t => hashEmbed(t)) };
   return {

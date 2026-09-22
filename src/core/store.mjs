@@ -33,7 +33,7 @@ export function openStore(root, file = 'radar.sqlite') {
     all: (sql, ...p) => db.prepare(sql).all(...p),
     run: (sql, ...p) => db.prepare(sql).run(...p),
     tx(fn) { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } },
-    close: () => db.close(),
+    close: () => { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {} db.close(); },
   };
 }
 
@@ -45,5 +45,8 @@ export function purge(store, { itemDays = 14 } = {}) {
   // pour les autres, la date de publication fait foi (les flux renvoient souvent un fond de catalogue ancien sans valeur de signal).
   const b = store.run("DELETE FROM items WHERE (family NOT IN ('E','H') AND COALESCE(published_at, first_seen_at) < ?) OR (family IN ('E','H') AND last_seen_at < ?)", cutoff, cutoff).changes;
   const c = store.run('DELETE FROM source_runs WHERE run_ts < ?', new Date(Date.now() - 30 * 864e5).toISOString()).changes;
-  return { snapshots: a, items: b, source_runs: c };
+  // embeddings : seulement utiles pendant la fenetre active de regroupement (72 h) ; au-dela on les supprime pour garder l'etat leger
+  let d = 0; try { d = store.run("DELETE FROM embeddings WHERE item_id IN (SELECT item_id FROM items WHERE COALESCE(evt_at, first_seen_at) < ?) OR item_id NOT IN (SELECT item_id FROM items)", new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
+  try { store.db.exec('VACUUM'); } catch {}
+  return { snapshots: a, items: b, source_runs: c, embeddings: d };
 }

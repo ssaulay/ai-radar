@@ -1,0 +1,76 @@
+name: radar
+
+on:
+  schedule:
+    # toutes les 30 minutes, décalé des heures pleines où GitHub Actions accumule du retard
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Forcer toutes les sources (ignorer les cadences)'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Restaurer l'état (branche state, un seul commit)
+        run: |
+          mkdir -p state
+          if git fetch --depth 1 origin state 2>/dev/null; then
+            git show origin/state:radar.sqlite > state/radar.sqlite && echo "état restauré ($(du -h state/radar.sqlite | cut -f1))"
+          else
+            echo "aucun état précédent : première exécution"
+          fi
+
+      - name: Tests
+        run: node --test tests/*.test.mjs
+
+      - name: Collecte, regroupement, score, rendu
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BSKY_JWT: ${{ secrets.BSKY_JWT }}
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then node radar.mjs run --force; else node radar.mjs run; fi
+
+      - name: Sauvegarder l'état (commit orphelin forcé, historique constant)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          rm -rf /tmp/state && mkdir -p /tmp/state && cp state/radar.sqlite /tmp/state/
+          cd /tmp/state
+          git init -q && git checkout -q -b state
+          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" add radar.sqlite
+          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
+
+      - name: Configurer Pages
+        uses: actions/configure-pages@v5
+      - name: Publier l'artefact Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Déployer sur GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
