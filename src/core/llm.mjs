@@ -22,6 +22,7 @@ export function makeLlm(store, providers, { runId = null, maxCalls = Infinity, c
         store.run('INSERT INTO llm_calls(run_id,purpose,provider,model,document_url,ms,ok,error,created_at) VALUES (?,?,?,?,?,?,0,?,?)', ctx.runId, purpose, prov.name, prov.model, documentUrl, Date.now() - started, msg.slice(0, 200), store.now());
         if (attempt < 3 && (r.status === 429 || /rate limit/i.test(msg))) { const w = msg.match(/try again in ([\d.]+)s/i); await sleep(((w ? Number(w[1]) : 20) + 2) * 1000); return json(purpose, messages, { documentUrl, textChars, maxOut, attempt: attempt + 1 }); }
         if (attempt < 1 && /reasoning_effort|unsupported/i.test(msg)) { prov.reasoning = undefined; return json(purpose, messages, { documentUrl, textChars, maxOut, attempt: attempt + 1 }); }
+        if (attempt < 1 && (r.status >= 500 || /server had an error|overloaded|try again/i.test(msg))) { await sleep(3000); return json(purpose, messages, { documentUrl, textChars, maxOut, attempt: attempt + 1 }); }
         return { error: /too large|context/i.test(msg) ? 'TOO_LARGE' : `LLM_ERROR ${msg.slice(0, 120)}` };
       }
       const usd = ((j.usage?.prompt_tokens ?? 0) / 1e6) * prov.inUsd + ((j.usage?.completion_tokens ?? 0) / 1e6) * prov.outUsd;

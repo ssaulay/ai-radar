@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { compactVectors } from './embed.mjs';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS items(
@@ -52,8 +53,10 @@ export function purge(store, { itemDays = 14 } = {}) {
   // scores intermediaires au-dela de 6 h (dernier score par sujet conserve). Objectif : etat sous la limite GitHub de 100 Mo.
   let e = 0, f = 0, g = 0;
   try { e = store.run('UPDATE clusters SET centroid=NULL, seed=NULL WHERE (centroid IS NOT NULL OR seed IS NOT NULL) AND last_seen_at < ?', new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
+  try { store.run('UPDATE clusters SET seed=NULL WHERE seed IS NOT NULL'); } catch {} // seed n'est jamais lu
+  let h = 0; try { h = compactVectors(store); } catch {}
   try { f = store.run('DELETE FROM press_embeddings WHERE created_at < ?', new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
   try { g = store.run('DELETE FROM cluster_scores WHERE computed_at < ? AND computed_at < (SELECT MAX(computed_at) FROM cluster_scores c2 WHERE c2.cluster_id = cluster_scores.cluster_id)', new Date(Date.now() - 6 * 3600e3).toISOString()).changes; } catch {}
   try { store.db.exec('VACUUM'); } catch {}
-  return { snapshots: a, items: b, source_runs: c, embeddings: d, cluster_vectors_cleared: e, press_embeddings: f, cluster_scores: g };
+  return { snapshots: a, items: b, source_runs: c, embeddings: d, cluster_vectors_cleared: e, press_embeddings: f, cluster_scores: g, vectors_compacted: h };
 }

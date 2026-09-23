@@ -33,7 +33,8 @@ Réponds en JSON :
 Items :
 ${lines}`;
     const res = await llm.json('brief', [{ role: 'user', content: prompt }], { maxOut: 500 });
-    if (res.error) { log(`  brief ${r.cluster_id}: ${res.error}`); if (/BUDGET|LLM_ERROR/.test(res.error)) break; continue; }
+    // on s'arrete seulement si le budget est epuise ou la cle refusee ; une erreur serveur passagere ne prive pas les autres sujets de brief
+    if (res.error) { log(`  brief ${r.cluster_id}: ${res.error}`); if (/BUDGET|Incorrect API key|invalidated|credits|insufficient_quota/i.test(res.error)) break; continue; }
     const d = res.data ?? {};
     const meta = { hooks: d.hooks ?? null, fit: String(d.fit ?? '').slice(0, 160), differentiation: String(d.differentiation ?? '').slice(0, 400), risk: String(d.risk ?? '').slice(0, 300), confidence: d.confidence ?? null };
     store.run('INSERT OR REPLACE INTO cluster_briefs(cluster_id,lang_fr,lang_en,model,generated_at,items_hash,meta_json) VALUES (?,?,?,?,?,?,?)', r.cluster_id, String(d.fr ?? '').slice(0, 900), String(d.en ?? '').slice(0, 900), `${llm.provider.model}|${d.confidence ?? '?'}|${String(d.label ?? '').slice(0, 120)}`, now, hash, JSON.stringify(meta));

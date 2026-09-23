@@ -7,6 +7,7 @@ import { openStore } from '../src/core/store.mjs';
 import { upsertItems } from '../src/collect/collect.mjs';
 import { loadLexicon, isAiRelevant, extractEntities, extractTerms } from '../src/analyze/relevance.mjs';
 import { makeEmbedder, cosine, hashEmbed } from '../src/core/embed.mjs';
+import * as embedMod from '../src/core/embed.mjs';
 import { clusterNewItems, ensureClusterSchema } from '../src/analyze/cluster.mjs';
 import { scoreAll, rebuildTermHourly, termBurst } from '../src/analyze/score.mjs';
 import { renderAll } from '../src/render/render.mjs';
@@ -24,6 +25,20 @@ test('pertinence IA : sources spécialisées toujours, sinon mots-clés ; entit�
   const terms = extractTerms('Anthropic releases Claude 5 with computer use', lex);
   assert.ok(terms.includes('@Anthropic') && terms.includes('@Claude'));
   assert.ok(terms.includes('computer use') || terms.some(t => t.includes('computer')));
+});
+
+test('vecteurs int8 : aller-retour avec erreur de cosinus < 0,005, anciens float32 lisibles et convertis à la purge', () => {
+  const { toBlob, fromBlob, normalize, isFloat32Blob } = embedMod;
+  let worst = 0;
+  for (let k = 0; k < 50; k++) { const v = normalize(Float32Array.from({ length: 512 }, () => Math.random() * 2 - 1)); const w = normalize(Float32Array.from({ length: 512 }, (_, i) => v[i] + (Math.random() - 0.5) * 0.2)); const b = toBlob(v); assert.equal(b.byteLength, 516); const err = Math.abs(cosine(v, w) - cosine(fromBlob(b), fromBlob(toBlob(w)))); if (err > worst) worst = err; }
+  assert.ok(worst < 0.005, 'erreur max ' + worst);
+  const v = normalize(Float32Array.from({ length: 512 }, () => Math.random() - 0.5)); const old = Buffer.from(v.buffer, v.byteOffset, v.byteLength);
+  assert.ok(isFloat32Blob(old)); assert.ok(cosine(fromBlob(old), v) > 0.9999);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')); const s = mk(dir);
+  s.run('INSERT INTO embeddings(item_id,model,vec) VALUES (1,?,?)', 'x', old); s.run('INSERT INTO clusters(cluster_id,centroid,seed,n,first_seen_at,last_seen_at) VALUES (1,?,?,1,?,?)', old, old, NOW, NOW);
+  const r = embedMod.compactVectors(s); assert.equal(r, 2);
+  assert.equal(s.get('SELECT length(vec) l FROM embeddings').l, 516); assert.ok(cosine(fromBlob(s.get('SELECT vec FROM embeddings').vec), v) > 0.999);
+  assert.equal(embedMod.compactVectors(s), 0, 'idempotent'); s.close();
 });
 
 test('embedding de repli : similaire pour titres proches, éloigné sinon', () => {
