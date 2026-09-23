@@ -87,8 +87,8 @@ try {
     if (['render', 'analyze', 'run'].includes(cmd) && results) {
       const providers = process.env.OPENAI_API_KEY ? [{ name: 'openai', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY, model: process.env.BRIEF_MODEL ?? 'gpt-5.4-nano', textChars: 20000, minGapMs: 0, inUsd: 0.20, outUsd: 1.25, free: false, reasoning: 'minimal' }] : [];
       const llm = makeLlm(store, providers, { maxCalls: Number(process.env.BRIEF_MAX_CALLS ?? 40), counters });
-      const b = await writeBriefs(store, llm, results, { top: Number(process.env.BRIEF_TOP ?? 30), maxUsdPerRun: Number(process.env.BRIEF_MAX_USD ?? 0.05), now, profile: loadProfile(ROOT) });
-      briefs = b.briefs; stats.briefs = { generated: b.generated ?? 0, reused: b.reused ?? 0, skipped: b.skipped ?? null, llm_usd: Number((counters.llmUsd ?? 0).toFixed(4)) };
+      const b = await writeBriefs(store, llm, results, { top: Number(process.env.BRIEF_TOP ?? 30), maxUsdPerRun: Number(process.env.BRIEF_MAX_USD ?? 0.05), maxUsdPerDay: Number(process.env.BRIEF_MAX_USD_DAY ?? 0.05), minAgeH: Number(process.env.BRIEF_MIN_AGE_H ?? 6), now, profile: loadProfile(ROOT) });
+      briefs = b.briefs; stats.briefs = { generated: b.generated ?? 0, reused: b.reused ?? 0, fresh: b.fresh ?? 0, skipped: b.skipped ?? null, llm_usd: Number((counters.llmUsd ?? 0).toFixed(4)), llm_usd_today: b.spent_today ?? null };
     }
     // signaux faibles (lot 5c) : apres le score pour connaitre les sujets, isole, mode fantome
     if (['analyze', 'run'].includes(cmd)) { try { stats.weak = weakPass(store, lex, { now, root: ROOT }).stats; } catch (e) { stats.weak = { error: e.message.slice(0, 200) }; console.log(`  signaux faibles indisponibles : ${e.message.slice(0, 120)}`); } }
