@@ -42,7 +42,7 @@ export async function clusterNewItems(store, embedder, lex, { log = console.log,
     store.tx(() => { batch.forEach((it, k) => store.run('INSERT OR REPLACE INTO embeddings(item_id,model,vec) VALUES (?,?,?)', it.item_id, embedder.name, toBlob(vecs[k]))); });
   }
   // 4. clusters actifs en memoire
-  const active = store.all('SELECT cluster_id, centroid, seed, n, first_seen_at, last_seen_at FROM clusters WHERE merged_into IS NULL AND last_seen_at >= ?', cutoff).map(c => ({ ...c, vec: fromBlob(c.centroid), members: [], sum: null }));
+  const active = store.all('SELECT cluster_id, centroid, n, first_seen_at, last_seen_at FROM clusters WHERE merged_into IS NULL AND last_seen_at >= ? AND centroid IS NOT NULL', cutoff).map(c => ({ ...c, vec: fromBlob(c.centroid), members: [], sum: null }));
   const byIdTmp = new Map(active.map(c => [c.cluster_id, c]));
   for (const r of store.all('SELECT ci.cluster_id, e.vec FROM cluster_items ci JOIN embeddings e ON e.item_id=ci.item_id WHERE ci.cluster_id IN (SELECT cluster_id FROM clusters WHERE merged_into IS NULL AND last_seen_at >= ?)', cutoff)) byIdTmp.get(r.cluster_id)?.members.push(fromBlob(r.vec));
   for (const c of active) { const v = fromBlob(c.centroid); c.sum = Float32Array.from(v, x => x * c.n); }
@@ -67,7 +67,7 @@ export async function clusterNewItems(store, embedder, lex, { log = console.log,
       for (const c of active) { const s = cosine(vec, c.vec); if (s <= bestSim || s < thr - CENTROID_SLACK) continue; let m = 0; for (const mv of c.members) { const x = cosine(vec, mv); if (x > m) m = x; if (m >= thr) break; } if (m >= thr) { bestSim = s; best = c; } }
       if (best) { attach(best, it, vec, bestSim); joined++; }
       else {
-        const r = store.run('INSERT INTO clusters(centroid,seed,dim,n,first_seen_at,last_seen_at,created_at) VALUES (?,?,?,?,?,?,?)', toBlob(vec), toBlob(vec), vec.length, 1, it.evt_at, it.evt_at, now);
+        const r = store.run('INSERT INTO clusters(centroid,seed,dim,n,first_seen_at,last_seen_at,created_at) VALUES (?,?,?,?,?,?,?)', toBlob(vec), null, vec.length, 1, it.evt_at, it.evt_at, now);
         const c = { cluster_id: Number(r.lastInsertRowid), vec, members: [vec], sum: Float32Array.from(vec), n: 1, first_seen_at: it.evt_at, last_seen_at: it.evt_at };
         active.push(c); byId.set(c.cluster_id, c); store.run('INSERT OR REPLACE INTO cluster_items(cluster_id,item_id,joined_at,sim) VALUES (?,?,?,?)', c.cluster_id, it.item_id, now, 1);
         if (it.url_canon) urlToCluster.set(it.url_canon, c.cluster_id); created++;

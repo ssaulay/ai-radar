@@ -38,7 +38,11 @@ jobs:
         run: |
           mkdir -p state
           if git fetch --depth 1 origin state 2>/dev/null; then
-            git show origin/state:radar.sqlite > state/radar.sqlite && echo "état restauré ($(du -h state/radar.sqlite | cut -f1))"
+            if git cat-file -e origin/state:radar.sqlite.gz 2>/dev/null; then
+              git show origin/state:radar.sqlite.gz | gunzip -c > state/radar.sqlite && echo "état restauré depuis radar.sqlite.gz ($(du -h state/radar.sqlite | cut -f1))"
+            else
+              git show origin/state:radar.sqlite > state/radar.sqlite && echo "état restauré depuis radar.sqlite non compressé ($(du -h state/radar.sqlite | cut -f1))"
+            fi
           else
             echo "aucun état précédent : première exécution"
           fi
@@ -60,10 +64,12 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          rm -rf /tmp/state && mkdir -p /tmp/state && cp state/radar.sqlite /tmp/state/
+          # l'etat est compresse (gzip divise par trois) : GitHub refuse tout fichier de plus de 100 Mo
+          rm -rf /tmp/state && mkdir -p /tmp/state && gzip -6 -c state/radar.sqlite > /tmp/state/radar.sqlite.gz
+          echo "état : $(du -h state/radar.sqlite | cut -f1) brut, $(du -h /tmp/state/radar.sqlite.gz | cut -f1) compressé"
           cd /tmp/state
           git init -q && git checkout -q -b state
-          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" add radar.sqlite
+          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" add radar.sqlite.gz
           git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
 

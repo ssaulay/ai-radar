@@ -96,6 +96,9 @@ export function scoreAll(store, lex, { now = store.now(), activeHours = 72, log 
       store.run('INSERT OR REPLACE INTO cluster_scores(cluster_id,computed_at,score,components_json,status,n_families,press_count) VALUES (?,?,?,?,?,?,?)', c.cluster_id, now, r.score, JSON.stringify(r.components), r.status, r.n_families, r.press_count);
       results.push({ ...r, label: c.label, entities: JSON.parse(c.entities_json ?? '[]') });
     }
+    // hygiene : au-dela de 6 h on ne garde que le dernier score de chaque sujet (le journal de publication lit le dernier), et rien au-dela de 7 jours ;
+    // sans cela la table croit de 5 000 lignes par passage et l'etat depasse la limite GitHub de 100 Mo
+    store.run('DELETE FROM cluster_scores WHERE computed_at < ? AND computed_at < (SELECT MAX(computed_at) FROM cluster_scores c2 WHERE c2.cluster_id = cluster_scores.cluster_id)', new Date(Date.parse(now) - 6 * 3600e3).toISOString());
     store.run('DELETE FROM cluster_scores WHERE computed_at < ?', new Date(Date.parse(now) - 7 * 864e5).toISOString());
   });
   results.sort((a, b) => b.score - a.score);

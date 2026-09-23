@@ -73,7 +73,7 @@ Règles communes aux catalogues 5a et 5b : le premier passage amorce l'instantan
 
 ## État
 
-Base SQLite `state/radar.sqlite` (ignorée par Git sur `main` ; publiée sur la branche `state`). Items conservés 14 jours, embeddings 4 jours, clusters et scores 72 h d'activité.
+Base SQLite `state/radar.sqlite` (ignorée par Git sur `main` ; publiée compressée en `radar.sqlite.gz` sur la branche `state`, GitHub refusant tout fichier de plus de 100 Mo). Items conservés 14 jours, embeddings 4 jours, vecteurs des sujets vidés après 4 jours d'inactivité, un seul score par sujet au-delà de 6 h, embeddings presse 4 jours.
 
 ## Ce que le score veut dire
 

@@ -52,6 +52,8 @@ test('clustering : trois formulations d’un même sujet se regroupent, un sujet
   assert.ok(!top.components.families.list.includes('G'), 'la presse ne compte pas dans les familles');
   assert.equal(top.status, 'CONFIRMED'); assert.equal(top.press_count, 1);
   assert.ok(top.components.official.value === true);
+  scoreAll(s, lex, { now: new Date(Date.parse(NOW) + 7 * 3600e3).toISOString(), log: () => {}, root: ROOT });
+  assert.equal(s.get('SELECT MAX(c) m FROM (SELECT COUNT(*) c FROM cluster_scores GROUP BY cluster_id)').m, 1, 'au-delà de 6 h, un seul score conservé par sujet');
   const again = await clusterNewItems(s, emb, lex, { now: NOW, log: () => {} });
   assert.equal(again.clustered, 0, 'second passage : rien à regrouper');
   const out = renderAll(s, res, { root: dir, now: NOW });

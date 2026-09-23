@@ -48,6 +48,12 @@ export function purge(store, { itemDays = 14 } = {}) {
   const c = store.run('DELETE FROM source_runs WHERE run_ts < ?', new Date(Date.now() - 30 * 864e5).toISOString()).changes;
   // embeddings : seulement utiles pendant la fenetre active de regroupement (72 h) ; au-dela on les supprime pour garder l'etat leger
   let d = 0; try { d = store.run("DELETE FROM embeddings WHERE item_id IN (SELECT item_id FROM items WHERE COALESCE(evt_at, first_seen_at) < ?) OR item_id NOT IN (SELECT item_id FROM items)", new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
+  // vecteurs des sujets inactifs depuis plus de 4 jours : inutiles au regroupement (fenetre 72 h) ; embeddings presse au-dela de 4 jours ;
+  // scores intermediaires au-dela de 6 h (dernier score par sujet conserve). Objectif : etat sous la limite GitHub de 100 Mo.
+  let e = 0, f = 0, g = 0;
+  try { e = store.run('UPDATE clusters SET centroid=NULL, seed=NULL WHERE (centroid IS NOT NULL OR seed IS NOT NULL) AND last_seen_at < ?', new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
+  try { f = store.run('DELETE FROM press_embeddings WHERE created_at < ?', new Date(Date.now() - 4 * 864e5).toISOString()).changes; } catch {}
+  try { g = store.run('DELETE FROM cluster_scores WHERE computed_at < ? AND computed_at < (SELECT MAX(computed_at) FROM cluster_scores c2 WHERE c2.cluster_id = cluster_scores.cluster_id)', new Date(Date.now() - 6 * 3600e3).toISOString()).changes; } catch {}
   try { store.db.exec('VACUUM'); } catch {}
-  return { snapshots: a, items: b, source_runs: c, embeddings: d };
+  return { snapshots: a, items: b, source_runs: c, embeddings: d, cluster_vectors_cleared: e, press_embeddings: f, cluster_scores: g };
 }
