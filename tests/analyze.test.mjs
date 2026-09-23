@@ -141,3 +141,23 @@ test('journal de publication : mark conserve score et statut, outcome ajoute une
   assert.throws(() => recordOutcome(s, { url: 'https://inconnu', impressions: 1 }));
   s.close();
 });
+
+import { writeBriefs, briefSpentToday } from '../src/analyze/brief.mjs';
+test('briefs : régénération seulement après 6 h, plafond journalier lu dans llm_calls, coût du jour rendu', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')); const s = mk(dir);
+  let calls = 0;
+  const llm = { enabled: true, provider: { model: 'fake', inUsd: 1, outUsd: 1 }, counters: { llmUsd: 0 }, json: async () => { calls++; s.run("INSERT INTO llm_calls(purpose,provider,model,prompt_tokens,completion_tokens,ok,created_at) VALUES ('brief','fake','fake',1000,100,1,?)", NOW); return { data: { label: 'Sujet libellé', fr: 'fr', en: 'en', fit: 'HIGH' } }; } };
+  s.run("INSERT INTO clusters(cluster_id,n,first_seen_at,last_seen_at,label) VALUES (1,2,?,?,'Sujet')", NOW, NOW);
+  const res = [{ cluster_id: 1, label: 'Sujet', status: 'ANTICIPATION', items: [{ item_id: 1, family: 'A', source_id: 'hn_top', title: 'A' }] }];
+  const a = await writeBriefs(s, llm, res, { now: NOW, log: () => {} }); assert.equal(a.generated, 1); assert.equal(calls, 1);
+  const more = [{ ...res[0], items: [...res[0].items, { item_id: 2, family: 'F', source_id: 'blog_openai', title: 'B' }] }];
+  const b = await writeBriefs(s, llm, more, { now: new Date(Date.parse(NOW) + 3600e3).toISOString(), log: () => {} });
+  assert.equal(b.generated, 0); assert.equal(b.fresh, 1, 'items changés mais brief de moins de 6 h : conservé'); assert.equal(calls, 1);
+  const c = await writeBriefs(s, llm, more, { now: new Date(Date.parse(NOW) + 7 * 3600e3).toISOString(), log: () => {} });
+  assert.equal(c.generated, 1, 'après 6 h et items changés : régénéré'); assert.equal(calls, 2);
+  s.run("INSERT INTO llm_calls(purpose,provider,model,prompt_tokens,completion_tokens,ok,created_at) VALUES ('brief','fake','fake',60000,0,1,?)", NOW);
+  assert.ok(briefSpentToday(s, llm.provider, NOW) > 0.05);
+  const d = await writeBriefs(s, llm, [{ cluster_id: 2, label: 'Autre', status: 'ANTICIPATION', items: [{ item_id: 3, family: 'A', source_id: 'hn_top', title: 'C' }] }], { now: new Date(Date.parse(NOW) + 8 * 3600e3).toISOString(), log: () => {} });
+  assert.equal(d.skipped, 'DAILY_BUDGET'); assert.equal(calls, 2); assert.ok(d.spent_today > 0.05);
+  s.close();
+});

@@ -69,7 +69,7 @@ Règles communes aux catalogues 5a et 5b : le premier passage amorce l'instantan
 
 ## Production
 
-`.github/workflows/radar.yml` : GitHub Actions toutes les 30 minutes (`7,37 * * * *`), tests puis `run`, état sauvegardé sur la branche orpheline `state` (un seul commit, réécrit à chaque passage), page déployée sur GitHub Pages par artefact. Secrets attendus : `OPENAI_API_KEY` (embeddings, briefs), optionnels `BSKY_JWT`. `GITHUB_TOKEN` est fourni par Actions. Coût mesuré : environ 0,003 USD d'embeddings par analyse complète du corpus initial ; en régime de croisière quelques centimes par jour.
+`.github/workflows/radar.yml` : GitHub Actions toutes les 30 minutes (`7,37 * * * *`), tests puis `run`, état sauvegardé sur la branche orpheline `state` (un seul commit, réécrit à chaque passage), page déployée sur GitHub Pages par artefact. Secrets attendus : `OPENAI_API_KEY` (embeddings, briefs), optionnels `BSKY_JWT`. `GITHUB_TOKEN` est fourni par Actions. Coût mesuré : environ 0,003 USD d'embeddings par analyse complète du corpus initial ; en régime de croisière quelques centimes par jour. Briefs plafonnés à 0,05 USD par passage et par jour UTC (`BRIEF_MAX_USD`, `BRIEF_MAX_USD_DAY`), un brief existant n'est régénéré qu'après 6 h (`BRIEF_MIN_AGE_H`) ; le coût du jour est publié dans `radar.json` (`stats.briefs.llm_usd_today`).
 
 ## État
 
