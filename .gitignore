@@ -4,3 +4,5 @@ state/
 node_modules/
 .DS_Store
 public/
+.wrangler/
+infra/cloudflare-trigger/node_modules/
