@@ -71,6 +71,8 @@ Règles communes aux catalogues 5a et 5b : le premier passage amorce l'instantan
 
 `.github/workflows/radar.yml` : GitHub Actions toutes les 30 minutes (`7,37 * * * *`), tests puis `run`, état sauvegardé sur la branche orpheline `state` (un seul commit, réécrit à chaque passage), page déployée sur GitHub Pages par artefact. Secrets attendus : `OPENAI_API_KEY` (embeddings, briefs), optionnels `BSKY_JWT`. `GITHUB_TOKEN` est fourni par Actions. Coût mesuré : environ 0,003 USD d'embeddings par analyse complète du corpus initial ; en régime de croisière quelques centimes par jour. Briefs plafonnés à 0,05 USD par passage et par jour UTC (`BRIEF_MAX_USD`, `BRIEF_MAX_USD_DAY`), un brief existant n'est régénéré qu'après 6 h (`BRIEF_MIN_AGE_H`) ; le coût du jour est publié dans `radar.json` (`stats.briefs.llm_usd_today`).
 
+**Déclencheur externe.** Le cron GitHub ne tourne qu'environ toutes les 3 h (retards et abandons documentés par GitHub). Un Worker Cloudflare gratuit (`infra/cloudflare-trigger/`, cron `7,37 * * * *` UTC) appelle `workflow_dispatch` avec `source=cloudflare-cron` ; le job `garde` de `radar.yml` saute tout passage planifié si le dernier passage ayant sauvegardé l'état a démarré il y a moins de 20 min, les déclenchements manuels ne sont jamais sautés. Mise en place et vérification : `infra/cloudflare-trigger/README.md`.
+
 ## État
 
 Base SQLite `state/radar.sqlite` (ignorée par Git sur `main` ; publiée compressée en `radar.sqlite.gz` sur la branche `state`, GitHub refusant tout fichier de plus de 100 Mo). Items conservés 14 jours, embeddings 4 jours, vecteurs des sujets vidés après 4 jours d'inactivité, un seul score par sujet au-delà de 6 h, embeddings presse 4 jours.

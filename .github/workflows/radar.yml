@@ -1,9 +1,12 @@
 name: radar
+run-name: "radar · ${{ github.event_name == 'schedule' && 'cron GitHub' || inputs.source || 'manuel' }}"
 
 on:
   schedule:
     # toutes les 30 minutes, décalé des heures pleines où GitHub Actions accumule du retard.
     # Réenregistré le 22/09/2026 : aucune exécution planifiée n'avait démarré après la création du dépôt.
+    # Constat des 22-23/09/2026 : GitHub ne l'exécute qu'environ toutes les 3 h. Le Worker Cloudflare
+    # (infra/cloudflare-trigger) appelle workflow_dispatch aux mêmes minutes ; ce cron reste en secours.
     - cron: '7,37 * * * *'
   workflow_dispatch:
     inputs:
@@ -11,6 +14,10 @@ on:
         description: 'Forcer toutes les sources (ignorer les cadences)'
         required: false
         default: 'false'
+      source:
+        description: "Origine : 'manuel' (défaut, jamais sauté) ou 'cloudflare-cron' (soumis au garde-fou de 20 min)"
+        required: false
+        default: 'manuel'
 
 concurrency:
   group: radar
@@ -22,13 +29,49 @@ permissions:
   id-token: write
 
 jobs:
+  garde:
+    # Un passage planifié (cron GitHub ou Worker Cloudflare) est sauté si le dernier passage ayant sauvegardé l'état
+    # a démarré il y a moins de 20 min : les deux planificateurs se doublent sans coût. Les passages sautés ne
+    # sauvegardent rien, donc ne remettent pas le compteur à zéro. Les déclenchements manuels (source 'manuel'
+    # ou force=true) ne sont jamais sautés. En cas d'erreur du garde-fou, le passage a lieu.
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.garde.outputs.skip }}
+    steps:
+      - id: garde
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          SOURCE: ${{ inputs.source }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && { [ -z "$SOURCE" ] || [ "$SOURCE" = "manuel" ] || [ "$FORCE" = "true" ]; }; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"; echo "déclenchement manuel : pas de garde-fou"; exit 0
+          fi
+          msg=$(gh api "repos/$GITHUB_REPOSITORY/commits/state" --jq '.commit.message' 2>/dev/null || true)
+          started=$(printf '%s' "$msg" | sed -n 's/.*started \([0-9TZ:-]*\).*/\1/p' | head -1)
+          if [ -z "$started" ]; then started=$(gh api "repos/$GITHUB_REPOSITORY/commits/state" --jq '.commit.committer.date' 2>/dev/null || true); fi
+          if [ -z "$started" ]; then echo "skip=false" >> "$GITHUB_OUTPUT"; echo "aucun état sauvegardé : on exécute"; exit 0; fi
+          age=$(( ( $(date -u +%s) - $(date -u -d "$started" +%s) ) / 60 ))
+          if [ "$age" -lt 20 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::passage sauté : le dernier passage ($EVENT/${SOURCE:-cron}) a démarré il y a $age min (< 20), état déjà à jour"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"; echo "dernier passage démarré il y a $age min : on exécute"
+          fi
+
   run:
+    needs: garde
+    if: needs.garde.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Heure de début (écrite dans le commit d'état, lue par le garde-fou)
+        run: echo "RUN_STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -70,7 +113,7 @@ jobs:
           cd /tmp/state
           git init -q && git checkout -q -b state
           git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" add radar.sqlite.gz
-          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ)"
+          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ) started ${RUN_STARTED}"
           git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
 
       - name: Configurer Pages

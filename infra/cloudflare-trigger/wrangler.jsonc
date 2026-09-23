@@ -1,0 +1,15 @@
+{
+  // Worker Cloudflare (plan gratuit : 5 crons par compte, 100 000 requêtes par jour) qui déclenche radar.yml.
+  // Déploiement : voir infra/cloudflare-trigger/README.md
+  "name": "ai-radar-trigger",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-09-01",
+  "triggers": { "crons": ["7,37 * * * *"] },
+  "vars": {
+    "GITHUB_REPO": "ssaulay/ai-radar",
+    "WORKFLOW_FILE": "radar.yml",
+    "GIT_REF": "main",
+    "SOURCE": "cloudflare-cron"
+  },
+  "observability": { "enabled": true }
+}
