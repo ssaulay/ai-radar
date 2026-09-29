@@ -1,3 +1,5 @@
+> **Projet arrêté le 29/09/2026.** Workflow `radar` désactivé (`gh workflow enable radar.yml` pour le relancer), Worker Cloudflare `ai-radar-trigger` supprimé (redéploiement : `infra/cloudflare-trigger/README.md`). La page GitHub Pages reste figée sur le dernier passage et l'état est conservé dans la release `state`.
+
 # ai-radar
 
 Radar gratuit des sujets IA qui émergent, pour repérer avant la presse ce qui fera l'actualité dans les 24 à 72 heures. Collecte multi-sources publiques, détection de burst sans LLM, page statique. Plan complet dans `docs/PLAN.md`.
