@@ -1,4 +1,4 @@
-> **Projet arrêté le 29/09/2026.** Workflow `radar` désactivé (`gh workflow enable radar.yml` pour le relancer), Worker Cloudflare `ai-radar-trigger` supprimé (redéploiement : `infra/cloudflare-trigger/README.md`). La page GitHub Pages reste figée sur le dernier passage et l'état est conservé dans la release `state`.
+> **Projet arrêté le 29/09/2026.** Workflow `radar` désactivé (`gh workflow enable radar.yml` pour le relancer), Worker Cloudflare `ai-radar-trigger` supprimé (redéploiement : `infra/cloudflare-trigger/README.md`), page GitHub Pages dépubliée, release et branche `state` supprimées (la base est perdue : un relancement repartirait de zéro).
 
 # ai-radar
 
