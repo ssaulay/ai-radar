@@ -49,9 +49,10 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ] && { [ -z "$SOURCE" ] || [ "$SOURCE" = "manuel" ] || [ "$FORCE" = "true" ]; }; then
             echo "skip=false" >> "$GITHUB_OUTPUT"; echo "déclenchement manuel : pas de garde-fou"; exit 0
           fi
-          msg=$(gh api "repos/$GITHUB_REPOSITORY/commits/state" --jq '.commit.message' 2>/dev/null || true)
+          # l'heure de début est dans la description de la release 'state' ; repli sur l'ancienne branche state (migration)
+          msg=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/state" --jq '.body' 2>/dev/null || true)
+          if [ -z "$msg" ]; then msg=$(gh api "repos/$GITHUB_REPOSITORY/commits/state" --jq '.commit.message' 2>/dev/null || true); fi
           started=$(printf '%s' "$msg" | sed -n 's/.*started \([0-9TZ:-]*\).*/\1/p' | head -1)
-          if [ -z "$started" ]; then started=$(gh api "repos/$GITHUB_REPOSITORY/commits/state" --jq '.commit.committer.date' 2>/dev/null || true); fi
           if [ -z "$started" ]; then echo "skip=false" >> "$GITHUB_OUTPUT"; echo "aucun état sauvegardé : on exécute"; exit 0; fi
           age=$(( ( $(date -u +%s) - $(date -u -d "$started" +%s) ) / 60 ))
           if [ "$age" -lt 20 ]; then
@@ -77,15 +78,15 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Restaurer l'état (branche state, un seul commit)
+      - name: Restaurer l'état (release 'state', repli sur l'ancienne branche state)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p state
-          if git fetch --depth 1 origin state 2>/dev/null; then
-            if git cat-file -e origin/state:radar.sqlite.gz 2>/dev/null; then
-              git show origin/state:radar.sqlite.gz | gunzip -c > state/radar.sqlite && echo "état restauré depuis radar.sqlite.gz ($(du -h state/radar.sqlite | cut -f1))"
-            else
-              git show origin/state:radar.sqlite > state/radar.sqlite && echo "état restauré depuis radar.sqlite non compressé ($(du -h state/radar.sqlite | cut -f1))"
-            fi
+          if gh release download state -p radar.sqlite.gz -O /tmp/radar.sqlite.gz 2>/dev/null; then
+            gunzip -c /tmp/radar.sqlite.gz > state/radar.sqlite && echo "état restauré depuis la release state ($(du -h state/radar.sqlite | cut -f1))"
+          elif git fetch --depth 1 origin state 2>/dev/null && git cat-file -e origin/state:radar.sqlite.gz 2>/dev/null; then
+            git show origin/state:radar.sqlite.gz | gunzip -c > state/radar.sqlite && echo "état restauré depuis l'ancienne branche state (migration, $(du -h state/radar.sqlite | cut -f1))"
           else
             echo "aucun état précédent : première exécution"
           fi
@@ -102,19 +103,17 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then node radar.mjs run --force; else node radar.mjs run; fi
 
-      - name: Sauvegarder l'état (commit orphelin forcé, historique constant)
+      - name: Sauvegarder l'état (asset de la release 'state', limite 2 Go par fichier)
         env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          # l'etat est compresse (gzip divise par trois) : GitHub refuse tout fichier de plus de 100 Mo
           rm -rf /tmp/state && mkdir -p /tmp/state && gzip -6 -c state/radar.sqlite > /tmp/state/radar.sqlite.gz
           echo "état : $(du -h state/radar.sqlite | cut -f1) brut, $(du -h /tmp/state/radar.sqlite.gz | cut -f1) compressé"
-          cd /tmp/state
-          git init -q && git checkout -q -b state
-          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" add radar.sqlite.gz
-          git -c user.name="ai-radar bot" -c user.email="actions@users.noreply.github.com" commit -qm "state $(date -u +%Y-%m-%dT%H:%MZ) started ${RUN_STARTED}"
-          git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
+          gh release view state >/dev/null 2>&1 || gh release create state --title "état du radar" --notes "état initial" --prerelease
+          gh release upload state /tmp/state/radar.sqlite.gz --clobber
+          # lu par le garde-fou ; écrit après l'envoi, donc un envoi raté ne remet pas le compteur à zéro
+          gh release edit state --notes "started ${RUN_STARTED}"
 
       - name: Configurer Pages
         uses: actions/configure-pages@v5
